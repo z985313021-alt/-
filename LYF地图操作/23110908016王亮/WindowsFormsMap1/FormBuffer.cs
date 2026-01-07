@@ -1,3 +1,4 @@
+// [Agent (通用辅助)] Modified: 全量中文化注释深挖
 using System;
 using System.Windows.Forms;
 using ESRI.ArcGIS.Carto;
@@ -201,7 +202,7 @@ namespace WindowsFormsMap1
                 string distUnit = cmbUnits.SelectedItem.ToString();
                 bufferTool.buffer_distance_or_field = distVal + " " + distUnit;
 
-                bufferTool.dissolve_option = "ALL"; // 融合所有
+                bufferTool.dissolve_option = "ALL"; // 融合（Dissolve）所有缓冲区要素
 
                 gp.Execute(bufferTool, null);
 

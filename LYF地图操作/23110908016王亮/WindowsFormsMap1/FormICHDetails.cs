@@ -1,3 +1,4 @@
+// [Agent (通用辅助)] Modified: 全量中文化注释深挖
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -46,8 +47,8 @@ namespace WindowsFormsMap1
 
                 dataGridView1.DataSource = dt;
                 
-                // [Member A] Modified: Fix NullReferenceException when field value is null
-                // 尝试抓取名称作为标题
+                // [Member A] 修改：修复当字段值为 null 时的 NullReferenceException
+                // 尝试抓取名称作为标题显示
                 int nameIdx = _feature.Fields.FindField("名称");
                 if (nameIdx != -1)
                 {

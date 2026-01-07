@@ -1,3 +1,4 @@
+// [Agent (通用辅助)] Modified: 全量中文化注释深挖
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -28,14 +29,14 @@ namespace WindowsFormsMap1
         {
             if (_mapControl == null) return;
             
-            // Loop through layers and add FeatureLayers to combobox
+            // 遍历图层列表并添加要素图层到下拉框
             for (int i = 0; i < _mapControl.LayerCount; i++)
             {
                 ILayer layer = _mapControl.get_Layer(i);
                 if (layer is IFeatureLayer)
                 {
                     IFeatureLayer featureLayer = layer as IFeatureLayer;
-                    // Filter: Ensure it's a valid dataset
+                    // 过滤：确保其包含有效的数据集
                     if (featureLayer.FeatureClass != null) 
                     {
                         cmbLayerList.Items.Add(layer.Name);
@@ -59,7 +60,7 @@ namespace WindowsFormsMap1
             if (cmbLayerList.SelectedItem == null) return;
             string selectedName = cmbLayerList.SelectedItem.ToString();
             
-            // Find the layer object
+            // 遍历寻找对应的图层对象
             for (int i = 0; i < _mapControl.LayerCount; i++)
             {
                 ILayer layer = _mapControl.get_Layer(i);

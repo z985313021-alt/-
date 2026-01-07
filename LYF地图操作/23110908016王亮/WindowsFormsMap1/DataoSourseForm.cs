@@ -1,4 +1,5 @@
-﻿using ESRI.ArcGIS.Carto;
+﻿// [Agent (通用辅助)] Modified: 全量中文化注释深挖
+using ESRI.ArcGIS.Carto;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -234,6 +235,10 @@ namespace WindowsFormsMap1
         {
             AddTextToQuery("OR");
         }
+        /// <summary>
+        /// 执行查询逻辑
+        /// </summary>
+        /// <param name="closeForm">查询完成后是否关闭窗口</param>
         private void ExecuteQuery(bool closeForm)
         {
             if (currentFeatureLayer == null)
@@ -253,13 +258,13 @@ namespace WindowsFormsMap1
                 IQueryFilter queryFilter = new QueryFilterClass();
                 queryFilter.WhereClause = txtWhere.Text;
 
-                // 2. 执行选择
+                // 2. 执行选择逻辑
                 IFeatureSelection featureSelection = currentFeatureLayer as IFeatureSelection;
 
-                // 默认使用“新建选择集”，如果你做了 cmbMethod 下拉框，可以用下面的 switch
+                // 默认使用“新建选择集”
                 esriSelectionResultEnum selectionType = esriSelectionResultEnum.esriSelectionResultNew;
 
-                // 如果你有 comboBoxMethod，请取消下面的注释
+                // 如果将来支持多种选择模式（添加、相交等），在此进行扩展
                 /*
                 if (comboBoxMethod.SelectedIndex == 1) selectionType = esriSelectionResultEnum.esriSelectionResultAdd;
                 else if (comboBoxMethod.SelectedIndex == 2) selectionType = esriSelectionResultEnum.esriSelectionResultXOR;
@@ -268,9 +273,9 @@ namespace WindowsFormsMap1
 
                 featureSelection.SelectFeatures(queryFilter, selectionType, false);
 
-                // 3. 刷新主地图视图 (高亮显示)
+                // 3. 刷新主地图视图（高亮显示选中要素）
                 IActiveView activeView = CurrentMap as IActiveView;
-                // 只刷新选择集部分，效率更高
+                // 仅刷新选择集图层绘制阶段，提高性能
                 activeView.PartialRefresh(esriViewDrawPhase.esriViewGeoSelection, null, null);
 
                 // 4. (可选) 提示查到了多少个
@@ -284,7 +289,7 @@ namespace WindowsFormsMap1
             }
             catch (Exception ex)
             {
-                MessageBox.Show("查询失败，请检查SQL语句格式。\n\n错误详情:\n" + ex.Message);
+                MessageBox.Show("查询失败，请检查 SQL 语句格式。\n\n错误详情:\n" + ex.Message);
             }
         }
 
