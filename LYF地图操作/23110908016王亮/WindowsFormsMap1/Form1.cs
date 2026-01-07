@@ -57,6 +57,9 @@ namespace WindowsFormsMap1
             // 4. 加载默认演示数据
             LoadDefaultMxd();
 
+            // [Member E] 集成：初始化鹰眼图
+            this.InitEagleEye();
+
             // [Member A] 集成：启动默认进入“可视化演示”模式
             this.tabControl1.SelectedIndex = 2;
         }
@@ -69,7 +72,11 @@ namespace WindowsFormsMap1
             if (System.IO.File.Exists(mxdPath))
             {
                 axMapControl2.LoadMxFile(mxdPath);
+                axMapControl2.Extent = axMapControl2.FullExtent; // 默认全图显示
                 axMapControl2.ActiveView.Refresh();
+
+                // [Member E] 同步鹰眼底图
+                this.SyncEagleEyeLayers();
 
                 // [重要] 可视化演示页在 Designer 中的索引是 2
                 // 强制触发一次 IndexChanged 以执行 UI 显隐逻辑
