@@ -91,9 +91,9 @@ namespace WindowsFormsMap1
             this.chart2.Series.Clear();
             Series series2 = new Series("类别分布");
             series2.ChartType = SeriesChartType.Pie;
-            series2.IsValueShownAsLabel = true;
-            series2.Label = "#VALX: #VAL"; // 标签格式: "类别: 数量"
+            series2.IsValueShownAsLabel = false; // [Member B] Modified: 隐藏饼图内标签，避免视觉杂乱
             series2.ToolTip = "#VALX: #VAL (#PERCENT)";
+            series2.LegendText = "#VALX: #VAL"; // 在图例中显示 类别: 数量
 
             this.chart2.Series.Add(series2);
             this.chart2.Titles.Clear();

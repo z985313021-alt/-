@@ -35,6 +35,24 @@ namespace WindowsFormsMap1
                 SyncToVisualMode();
                 if (!_isVisualLayoutInitialized) InitVisualLayout();
             }
+            else if (tabControl1.SelectedIndex == 0)
+            {
+                // [Member A] 进入数据视图时的鲁棒性增强
+                // 1. 强制设为全图显示（满足用户“适当大小”的要求）
+                if (axMapControl2.LayerCount > 0)
+                {
+                    axMapControl2.Extent = axMapControl2.FullExtent;
+                    axMapControl2.ActiveView.Refresh();
+                }
+
+                // 2. 解决 WinForms 容器刷新滞后导致的“重叠”或“刷新不全”问题
+                this.BeginInvoke(new Action(() =>
+                {
+                    this.axMapControl2.Refresh();
+                    if (this.axTOCControl2 != null) this.axTOCControl2.Update();
+                    this.Refresh(); // 强制主窗体重绘以修正 Splitter 布局
+                }));
+            }
         }
 
         private Panel _panelSidebar; // [Member E] 新增：左侧现代导航栏
