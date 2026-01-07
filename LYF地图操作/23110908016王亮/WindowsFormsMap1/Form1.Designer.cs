@@ -90,6 +90,7 @@ namespace WindowsFormsMap1
             this.btnVisualZoomOut = new System.Windows.Forms.Button();
             this.btnVisualFull = new System.Windows.Forms.Button();
             this.btnVisualSync = new System.Windows.Forms.Button();
+            this.btnVisualArrow = new System.Windows.Forms.Button();
             this.axLicenseControl1 = new ESRI.ArcGIS.Controls.AxLicenseControl();
             this.menuStrip1.SuspendLayout();
             this.statusStrip1.SuspendLayout();
@@ -531,21 +532,22 @@ namespace WindowsFormsMap1
             this.panelVisualHeader.Controls.Add(this.btnBackToPro);
             this.panelVisualHeader.Controls.Add(this.btnVisualSearch);
             this.panelVisualHeader.Controls.Add(this.txtVisualSearch);
+            this.panelVisualHeader.Controls.Add(this.btnVisualArrow); // Add LAST = Top Z-order
             this.panelVisualHeader.Dock = System.Windows.Forms.DockStyle.Top;
             this.panelVisualHeader.Location = new System.Drawing.Point(3, 3);
             this.panelVisualHeader.Name = "panelVisualHeader";
             this.panelVisualHeader.Size = new System.Drawing.Size(728, 45);
             this.panelVisualHeader.TabIndex = 1;
             // 
-            // btnVisualSync
+            // btnVisualArrow
             // 
-            this.btnVisualSync.Location = new System.Drawing.Point(520, 10);
-            this.btnVisualSync.Name = "btnVisualSync";
-            this.btnVisualSync.Size = new System.Drawing.Size(75, 25);
-            this.btnVisualSync.TabIndex = 7;
-            this.btnVisualSync.Text = "同步数据";
-            this.btnVisualSync.UseVisualStyleBackColor = true;
-            this.btnVisualSync.Click += new System.EventHandler(this.BtnVisualSync_Click);
+            this.btnVisualArrow.Location = new System.Drawing.Point(600, 10); // 520(Sync) + 75(Width) + 5(Gap) = 600
+            this.btnVisualArrow.Name = "btnVisualArrow";
+            this.btnVisualArrow.Size = new System.Drawing.Size(50, 25);
+            this.btnVisualArrow.TabIndex = 99; 
+            this.btnVisualArrow.Text = "指针";
+            this.btnVisualArrow.UseVisualStyleBackColor = true;
+            this.btnVisualArrow.Click += new System.EventHandler(this.BtnVisualArrow_Click);
             // 
             // btnVisualPan
             // 
@@ -587,6 +589,16 @@ namespace WindowsFormsMap1
             this.btnVisualFull.UseVisualStyleBackColor = true;
             this.btnVisualFull.Click += new System.EventHandler(this.BtnVisualFull_Click);
             // 
+            // btnVisualSync
+            // 
+            this.btnVisualSync.Location = new System.Drawing.Point(520, 10);
+            this.btnVisualSync.Name = "btnVisualSync";
+            this.btnVisualSync.Size = new System.Drawing.Size(75, 25);
+            this.btnVisualSync.TabIndex = 7;
+            this.btnVisualSync.Text = "同步数据";
+            this.btnVisualSync.UseVisualStyleBackColor = true;
+            this.btnVisualSync.Click += new System.EventHandler(this.BtnVisualSync_Click);
+            // 
             // txtVisualSearch
             // 
             this.txtVisualSearch.Location = new System.Drawing.Point(12, 12);
@@ -603,6 +615,8 @@ namespace WindowsFormsMap1
             this.btnVisualSearch.Text = "查找非遗";
             this.btnVisualSearch.UseVisualStyleBackColor = true;
             this.btnVisualSearch.Click += new System.EventHandler(this.BtnVisualSearch_Click);
+
+
             // 
             // btnBackToPro
             // 
@@ -727,7 +741,9 @@ namespace WindowsFormsMap1
         private System.Windows.Forms.Button btnVisualZoomIn;
         private System.Windows.Forms.Button btnVisualZoomOut;
         private System.Windows.Forms.Button btnVisualFull;
+
         private System.Windows.Forms.Button btnVisualSync;
+        private System.Windows.Forms.Button btnVisualArrow; // [New]
         private ESRI.ArcGIS.Controls.AxMapControl axMapControlVisual;
         private ESRI.ArcGIS.Controls.AxPageLayoutControl axPageLayoutControl1;
         private System.Windows.Forms.ToolStripMenuItem 清除选择集ToolStripMenuItem;

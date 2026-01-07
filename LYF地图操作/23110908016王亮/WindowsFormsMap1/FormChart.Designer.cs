@@ -42,6 +42,7 @@ namespace WindowsFormsMap1
             this.lblTime = new System.Windows.Forms.Label();
             this.trackBar1 = new System.Windows.Forms.TrackBar();
             this.cmbChartType = new System.Windows.Forms.ComboBox();
+            this.btnExport = new System.Windows.Forms.Button();
             ((System.ComponentModel.ISupportInitialize)(this.splitContainer1)).BeginInit();
             this.splitContainer1.Panel1.SuspendLayout();
             this.splitContainer1.Panel2.SuspendLayout();
@@ -108,6 +109,7 @@ namespace WindowsFormsMap1
             // 
             // panelBottom
             // 
+            this.panelBottom.Controls.Add(this.btnExport);
             this.panelBottom.Controls.Add(this.cmbChartType);
             this.panelBottom.Controls.Add(this.lblTime);
             this.panelBottom.Controls.Add(this.trackBar1);
@@ -141,6 +143,16 @@ namespace WindowsFormsMap1
             this.cmbChartType.Size = new System.Drawing.Size(120, 29);
             this.cmbChartType.TabIndex = 2;
             this.cmbChartType.SelectedIndexChanged += new System.EventHandler(this.CmbChartType_SelectedIndexChanged);
+            // 
+            // btnExport
+            // 
+            this.btnExport.Location = new System.Drawing.Point(160, 60);
+            this.btnExport.Name = "btnExport";
+            this.btnExport.Size = new System.Drawing.Size(120, 29);
+            this.btnExport.TabIndex = 3;
+            this.btnExport.Text = "导出报告";
+            this.btnExport.UseVisualStyleBackColor = true;
+            this.btnExport.Click += new System.EventHandler(this.btnExport_Click);
             // 
             // trackBar1
             // 
@@ -188,5 +200,6 @@ namespace WindowsFormsMap1
         private System.Windows.Forms.TrackBar trackBar1;
         private System.Windows.Forms.Label lblTime;
         private System.Windows.Forms.ComboBox cmbChartType;
+        private System.Windows.Forms.Button btnExport;
     }
 }

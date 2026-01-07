@@ -65,5 +65,69 @@ namespace WindowsFormsMap1
         {
             this.Close();
         }
+
+        private void btnSearch_Click(object sender, EventArgs e)
+        {
+             try
+            {
+                if (_feature == null) return;
+
+                // 尝试找名称字段，支持多种命名
+                string nameField = "";
+                string[] possibleNames = { "名称", "Name", "Title", "项目名称", "非遗名", "ProjectName" };
+                
+                IFields fields = _feature.Fields;
+                for (int i = 0; i < fields.FieldCount; i++)
+                {
+                    string fName = fields.get_Field(i).Name;
+                    foreach (string k in possibleNames)
+                    {
+                        if (fName.Equals(k, StringComparison.OrdinalIgnoreCase))
+                        {
+                            nameField = fName;
+                            break;
+                        }
+                    }
+                    if (!string.IsNullOrEmpty(nameField)) break;
+                }
+
+                if (string.IsNullOrEmpty(nameField))
+                {
+                    // 如果没找到名称字段，尝试找索引为1或2的字符串字段作为替补
+                    for (int i = 0; i < fields.FieldCount; i++)
+                    {
+                        if (fields.get_Field(i).Type == esriFieldType.esriFieldTypeString && i > 0)
+                        {
+                            nameField = fields.get_Field(i).Name;
+                            break;
+                        }
+                    }
+                }
+
+                if (!string.IsNullOrEmpty(nameField))
+                {
+                    int idx = fields.FindField(nameField);
+                    object val = _feature.get_Value(idx);
+                    if (val != null && val != DBNull.Value)
+                    {
+                        string keyword = val.ToString();
+                        string url = "https://www.baidu.com/s?wd=" + System.Uri.EscapeDataString("非遗 " + keyword);
+                        System.Diagnostics.Process.Start(url);
+                    }
+                    else
+                    {
+                        MessageBox.Show("该要素名称为空，无法搜索。");
+                    }
+                }
+                else
+                {
+                    MessageBox.Show("未找到有效的名称字段。");
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("打开浏览器失败: " + ex.Message);
+            }
+        }
     }
 }

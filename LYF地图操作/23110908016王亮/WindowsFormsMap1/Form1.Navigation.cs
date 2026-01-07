@@ -49,6 +49,69 @@ namespace WindowsFormsMap1
                 case MapToolMode.MeasureArea:
                     _measureHelper.OnMouseDown(e.x, e.y);
                     break;
+                default: 
+                    // [Member B] Click Identify Logic
+                    // Only trigger if in default mode (Arrow)
+                    DoIdentify(e.x, e.y, axMapControl2);
+                    break;
+            }
+        }
+
+        // [Member B] Identify Feature (Shared Logic)
+        private void DoIdentify(int x, int y, ESRI.ArcGIS.Controls.AxMapControl targetMapControl = null)
+        {
+            try
+            {
+                if (targetMapControl == null) targetMapControl = this.axMapControl2;
+
+                // 1. Create envelope
+                IEnvelope pEnv = new EnvelopeClass();
+                IPoint pPoint = targetMapControl.ActiveView.ScreenDisplay.DisplayTransformation.ToMapPoint(x, y);
+                // Adjust buffer size based on map units. 
+                // For screen clicks, a fixed pixel tolerance converted to map units is better, 
+                // but percentage of width is okay if map isn't too zoomed in/out.
+                // Let's use a slightly larger buffer or pixel based logic if possible.
+                // Simpler: 5 pixels tolerance
+                double dist = targetMapControl.ActiveView.ScreenDisplay.DisplayTransformation.FromPoints(5);
+                pEnv.PutCoords(pPoint.X - dist, pPoint.Y - dist, pPoint.X + dist, pPoint.Y + dist);
+
+                // 2. Iterate ALL layers to find a match
+                IFeature pFoundFeature = null;
+                
+                // Iterate from Top (0) to Bottom
+                for (int i = 0; i < targetMapControl.LayerCount; i++)
+                {
+                    ILayer l = targetMapControl.get_Layer(i);
+                    if (l is IFeatureLayer fl && fl.Visible)
+                    {
+                        // Only check Point layers for now (as requested for ICH points)
+                        if (fl.FeatureClass.ShapeType == esriGeometryType.esriGeometryPoint)
+                        {
+                            ISpatialFilter pSpatialFilter = new SpatialFilterClass();
+                            pSpatialFilter.Geometry = pEnv;
+                            pSpatialFilter.SpatialRel = esriSpatialRelEnum.esriSpatialRelIntersects;
+
+                            IFeatureCursor pCursor = fl.Search(pSpatialFilter, false);
+                            pFoundFeature = pCursor.NextFeature();
+                            
+                            System.Runtime.InteropServices.Marshal.ReleaseComObject(pCursor);
+
+                            // If found, stop searching
+                            if (pFoundFeature != null) break;
+                        }
+                    }
+                }
+
+                if (pFoundFeature != null)
+                {
+                    // 4. Show Details Form
+                    FormICHDetails form = new FormICHDetails(pFoundFeature);
+                    form.ShowDialog();
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("Identify Error: " + ex.Message);
             }
         }
 

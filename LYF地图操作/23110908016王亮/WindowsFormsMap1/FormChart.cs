@@ -1,6 +1,9 @@
 using System;
 using System.Windows.Forms;
 using System.Windows.Forms.DataVisualization.Charting;
+using System.IO;
+using System.Text;
+using System.Drawing;
 
 namespace WindowsFormsMap1
 {
@@ -313,6 +316,75 @@ namespace WindowsFormsMap1
                 if (chart2.Titles.Count > 0) chart2.Titles[0].Text = "暂无类别数据";
             }
             chart2.Invalidate();
+            chart2.Invalidate();
+        }
+
+        private void btnExport_Click(object sender, EventArgs e)
+        {
+            SaveFileDialog sfd = new SaveFileDialog();
+            sfd.Filter = "PNG Image (*.png)|*.png|Text Report (*.txt)|*.txt";
+            sfd.Title = "Export Dashboard Data";
+            sfd.FileName = "Dashboard_Report_" + trackBar1.Value;
+
+            if (sfd.ShowDialog() == DialogResult.OK)
+            {
+                if (sfd.FilterIndex == 1) // PNG
+                {
+                    try
+                    {
+                        // Capture the SplitContainer (both charts)
+                        int w = splitContainer1.Width;
+                        int h = splitContainer1.Height;
+                        Bitmap bmp = new Bitmap(w, h);
+                        splitContainer1.DrawToBitmap(bmp, new Rectangle(0, 0, w, h));
+                        bmp.Save(sfd.FileName, System.Drawing.Imaging.ImageFormat.Png);
+                        MessageBox.Show("Export Successful: " + sfd.FileName, "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show("Export Failed: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
+                }
+                else if (sfd.FilterIndex == 2) // TXT
+                {
+                    try
+                    {
+                        StringBuilder sb = new StringBuilder();
+                        sb.AppendLine("=== Dashboard Report ===");
+                        sb.AppendLine("Year: " + trackBar1.Value);
+                        sb.AppendLine("Generated on: " + DateTime.Now.ToString());
+                        sb.AppendLine();
+                        
+                        sb.AppendLine("--- City Statistics ---");
+                        // Iterate chart1 series
+                        if(chart1.Series.Count > 0)
+                        {
+                            foreach(var dp in chart1.Series[0].Points)
+                            {
+                                sb.AppendLine($"{dp.AxisLabel}: {dp.YValues[0]}");
+                            }
+                        }
+                        sb.AppendLine();
+
+                        sb.AppendLine("--- Category Statistics ---");
+                        // Iterate chart2 series
+                        if(chart2.Series.Count > 0)
+                        {
+                            foreach(var dp in chart2.Series[0].Points)
+                            {
+                                sb.AppendLine($"{dp.AxisLabel}: {dp.YValues[0]}"); 
+                            }
+                        }
+
+                        File.WriteAllText(sfd.FileName, sb.ToString());
+                        MessageBox.Show("Export Successful: " + sfd.FileName, "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show("Export Failed: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
+                }
+            }
         }
     }
 }

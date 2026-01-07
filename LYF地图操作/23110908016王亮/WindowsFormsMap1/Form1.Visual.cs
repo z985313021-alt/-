@@ -78,7 +78,12 @@ namespace WindowsFormsMap1
 
             // 4. Add SplitContainer to tabPageVisual (under Header)
             tabPageVisual.Controls.Add(_splitContainerVisual);
-            _splitContainerVisual.BringToFront(); // Ensure it's visible
+           
+            // [Member B] Fix: Layout Order
+            // We want Header to dock TOP first (reserve space), then SplitContainer to Fill the rest.
+            // In WinForms, lower Z-order (Back) docks first.
+            panelVisualHeader.SendToBack(); 
+            _splitContainerVisual.BringToFront();
 
             // Ensure Header stays at top? Header is Dock=Top, SplitContainer is Dock=Fill.
             // If we Add SplitContainer *after* Header is already there, WinForms Dock logic works by Z-order.
@@ -170,6 +175,13 @@ namespace WindowsFormsMap1
 
         private void BtnBackToPro_Click(object sender, EventArgs e) => tabControl1.SelectedIndex = 0;
 
+        private void BtnVisualArrow_Click(object sender, EventArgs e)
+        {
+            // Reset to pointer mode (Identify)
+            axMapControlVisual.CurrentTool = null;
+            axMapControlVisual.MousePointer = esriControlsMousePointer.esriPointerArrow;
+        }
+
         private void BtnVisualPan_Click(object sender, EventArgs e)
         {
             // 使用内置漫游工具，操作手感与主界面完全一致
@@ -255,8 +267,11 @@ namespace WindowsFormsMap1
 
         private void AxMapControlVisual_OnMouseDown(object sender, IMapControlEvents2_OnMouseDownEvent e)
         {
-            // [Member E] Modified: Removed click-to-identify logic to prevent accidental popups and selection of background layers.
-            // Map navigation tools (Pan, Zoom) in the toolbar should be used instead.
+            if (e.button != 1) return;
+            // [Member B] Enable Identify in Visual Mode
+            // Since there are no other tools (Measure/Editor) active in Visual Mode,
+            // we can default to Identify.
+            DoIdentify(e.x, e.y, axMapControlVisual);
         }
 
         /// <summary>
