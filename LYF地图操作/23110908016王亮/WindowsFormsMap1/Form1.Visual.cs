@@ -119,10 +119,10 @@ namespace WindowsFormsMap1
 
             AddMapNavigationButtons(); // 添加导航按钮
 
-            axMapControlVisual.Parent = null;
             axMapControlVisual.Dock = DockStyle.Fill;
             mapContainer.Controls.Add(axMapControlVisual);
             mapContainer.Controls.Add(_panelMapToolbar);
+            _panelMapToolbar.BringToFront(); // 确保工具栏在最上层
 
             _splitContainerVisual.Panel1.Controls.Add(mapContainer);
 
@@ -156,33 +156,33 @@ namespace WindowsFormsMap1
             var btnPan = CreateNavButton("漫游");
             btnPan.Click += (s, e) =>
             {
-                ICommand cmd = new ControlsMapPanToolClass();
-                cmd.OnCreate(axMapControlVisual.Object);
-                axMapControlVisual.CurrentTool = cmd as ITool;
+                ESRI.ArcGIS.SystemUI.ITool tool = new ControlsMapPanToolClass();
+                ((ESRI.ArcGIS.SystemUI.ICommand)tool).OnCreate(axMapControlVisual.Object);
+                axMapControlVisual.CurrentTool = tool;
             };
 
             var btnZoomIn = CreateNavButton("放大");
             btnZoomIn.Click += (s, e) =>
             {
-                ICommand cmd = new ControlsMapZoomInToolClass();
-                cmd.OnCreate(axMapControlVisual.Object);
-                axMapControlVisual.CurrentTool = cmd as ITool;
+                ESRI.ArcGIS.SystemUI.ITool tool = new ControlsMapZoomInToolClass();
+                ((ESRI.ArcGIS.SystemUI.ICommand)tool).OnCreate(axMapControlVisual.Object);
+                axMapControlVisual.CurrentTool = tool;
             };
 
             var btnZoomOut = CreateNavButton("缩小");
             btnZoomOut.Click += (s, e) =>
             {
-                ICommand cmd = new ControlsMapZoomOutToolClass();
-                cmd.OnCreate(axMapControlVisual.Object);
-                axMapControlVisual.CurrentTool = cmd as ITool;
+                ESRI.ArcGIS.SystemUI.ITool tool = new ControlsMapZoomOutToolClass();
+                ((ESRI.ArcGIS.SystemUI.ICommand)tool).OnCreate(axMapControlVisual.Object);
+                axMapControlVisual.CurrentTool = tool;
             };
 
             var btnIdentify = CreateNavButton("识别");
             btnIdentify.Click += (s, e) =>
             {
-                ICommand cmd = new ControlsMapIdentifyToolClass();
-                cmd.OnCreate(axMapControlVisual.Object);
-                axMapControlVisual.CurrentTool = cmd as ITool;
+                ESRI.ArcGIS.SystemUI.ITool tool = new ControlsMapIdentifyToolClass();
+                ((ESRI.ArcGIS.SystemUI.ICommand)tool).OnCreate(axMapControlVisual.Object);
+                axMapControlVisual.CurrentTool = tool;
             };
 
             _panelMapToolbar.Controls.Add(btnIdentify);
