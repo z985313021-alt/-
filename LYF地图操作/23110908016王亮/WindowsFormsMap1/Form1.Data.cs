@@ -11,7 +11,7 @@ namespace WindowsFormsMap1
     public partial class Form1
     {
         // 成员 D：数据中台 (Data Fabric)
-        
+
         public void InitDataModule()
         {
         }
@@ -66,7 +66,7 @@ namespace WindowsFormsMap1
                 int tIdx = fields.FindField("公布时间");
                 if (tIdx == -1) tIdx = fields.FindField("Time");
                 if (tIdx == -1) tIdx = fields.FindField("Year");
-                
+
                 if (tIdx != -1)
                 {
                     IField f = fields.get_Field(tIdx);
@@ -120,6 +120,118 @@ namespace WindowsFormsMap1
             {
                 return 0;
             }
+        }
+
+        /// <summary>
+        /// [API] 获取指定年份的非遗项目类别统计
+        /// </summary>
+        /// <param name="year">当前滑块年份</param>
+        /// <returns>Key:类别名称, Value:数量</returns>
+        public Dictionary<string, int> GetCategoryStats(int year)
+        {
+            Dictionary<string, int> stats = new Dictionary<string, int>();
+            try
+            {
+                // 1. 定位目标波段/图层
+                IFeatureLayer targetLayer = null;
+                for (int i = 0; i < axMapControl2.LayerCount; i++)
+                {
+                    ILayer layer = axMapControl2.get_Layer(i);
+                    if (layer is IFeatureLayer && layer.Visible)
+                    {
+                        string n = layer.Name;
+                        if (n.Contains("名录") || n.Contains("项目") || n.Contains("非遗") || n.Contains("ICH"))
+                        {
+                            targetLayer = layer as IFeatureLayer;
+                            break;
+                        }
+                    }
+                }
+                if (targetLayer == null && axMapControl2.LayerCount > 0)
+                {
+                    ILayer l = axMapControl2.get_Layer(0);
+                    if (l is IFeatureLayer) targetLayer = l as IFeatureLayer;
+                }
+                if (targetLayer == null) return stats;
+
+                IFields fields = targetLayer.FeatureClass.Fields;
+
+                // 2. 匹配类别字段
+                string categoryField = "";
+                string[] catKeys = { "类别", "Category", "Type", "ProjectCategory", "LB", "XM_LB" };
+                for (int i = 0; i < fields.FieldCount; i++)
+                {
+                    string fName = fields.get_Field(i).Name;
+                    foreach (string k in catKeys) if (fName.Equals(k, StringComparison.OrdinalIgnoreCase)) { categoryField = fName; break; }
+                    if (!string.IsNullOrEmpty(categoryField)) break;
+                }
+
+                if (string.IsNullOrEmpty(categoryField)) return stats;
+
+                // 3. 匹配时间字段 (复用逻辑)
+                string realTimeField = "";
+                bool isNumeric = false;
+                int tIdx = fields.FindField("公布时间");
+                if (tIdx == -1) tIdx = fields.FindField("Time");
+                if (tIdx == -1) tIdx = fields.FindField("Year");
+
+                if (tIdx != -1)
+                {
+                    IField f = fields.get_Field(tIdx);
+                    realTimeField = f.Name;
+                    isNumeric = (f.Type != esriFieldType.esriFieldTypeString && f.Type != esriFieldType.esriFieldTypeDate);
+                }
+
+                // 4. 构建查询条件
+                string timeClause = "";
+                if (!string.IsNullOrEmpty(realTimeField))
+                {
+                    int batch = 0;
+                    if (year >= 2021) batch = 5;
+                    else if (year >= 2014) batch = 4;
+                    else if (year >= 2011) batch = 3;
+                    else if (year >= 2008) batch = 2;
+                    else if (year >= 2006) batch = 1;
+
+                    if (isNumeric)
+                    {
+                        timeClause = $"(({realTimeField} >= 1900 AND {realTimeField} <= {year}) OR ({realTimeField} > 0 AND {realTimeField} <= {batch} AND {realTimeField} < 20))";
+                    }
+                    else
+                    {
+                        timeClause = $"({realTimeField} LIKE '%{year}%' OR {realTimeField} LIKE '%{batch}%')";
+                    }
+                }
+
+                // 5. 执行查询并统计
+                IQueryFilter queryFilter = new QueryFilterClass();
+                if (!string.IsNullOrEmpty(timeClause))
+                {
+                    queryFilter.WhereClause = timeClause;
+                }
+
+                IFeatureCursor cursor = targetLayer.Search(queryFilter, true);
+                IFeature feature = cursor.NextFeature();
+
+                int catIdx = fields.FindField(categoryField);
+                while (feature != null)
+                {
+                    object val = feature.get_Value(catIdx);
+                    string catName = (val != null && val != DBNull.Value) ? val.ToString().Trim() : "其他";
+                    if (string.IsNullOrEmpty(catName)) catName = "其他";
+
+                    if (stats.ContainsKey(catName)) stats[catName]++;
+                    else stats[catName] = 1;
+
+                    feature = cursor.NextFeature();
+                }
+                System.Runtime.InteropServices.Marshal.ReleaseComObject(cursor);
+            }
+            catch (Exception)
+            {
+                // ignore
+            }
+            return stats;
         }
     }
 }

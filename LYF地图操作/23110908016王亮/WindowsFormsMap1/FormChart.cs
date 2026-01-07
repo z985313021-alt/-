@@ -4,18 +4,17 @@ using System.Windows.Forms.DataVisualization.Charting;
 
 namespace WindowsFormsMap1
 {
+
     // [Member B] Added: Dashboard Form for Charts and Stats
     public partial class FormChart : Form
     {
         private ESRI.ArcGIS.Controls.AxMapControl _mapControl;
         private Form1 _mainForm; // [Member B] Reference to Main Form for Data Access
-        private ComboBox cmbChartType; // [Member B] Chart Type Selector
 
         public FormChart()
         {
             InitializeComponent();
             InitMyChart();
-            InitDashboardControls(); 
         }
 
         public void SetMapControl(ESRI.ArcGIS.Controls.AxMapControl mapControl)
@@ -28,55 +27,7 @@ namespace WindowsFormsMap1
         {
             _mainForm = form;
             // [Fix] Trigger data update immediately after linking
-            // Use a default year or current slider value
             UpdateChartData(trackBar1.Value);
-        }
-
-        private void InitMyChart()
-        {
-            // 初始化示例数据 (初始加载时还没连上 Form1，先留空或用默认)
-            this.chart1.Series.Clear();
-            Series series = new Series("非遗数量");
-            series.ChartType = SeriesChartType.Column; 
-            series.ToolTip = "点击查看 #VALX 详情"; 
-            
-            // 预设城市列表
-            string[] cities = new string[] { 
-                "济南市", "青岛市", "淄博市", "枣庄市", "东营市", "烟台市", "潍坊市", "济宁市", 
-                "泰安市", "威海市", "日照市", "临沂市", "德州市", "聊城市", "滨州市", "菏泽市" 
-            };
-            
-            foreach(var city in cities)
-            {
-                // 暂时给个初始值 0，等待 Load 或 Slider 触发更新
-                series.Points.AddXY(city, 0); 
-            }
-
-            this.chart1.Series.Add(series);
-            this.chart1.Titles.Add("山东省各市非遗数量统计 (实时数据)");
-            this.chart1.ChartAreas[0].AxisX.Interval = 1;
-            this.chart1.MouseClick += Chart1_MouseClick;
-        }
-
-        private void InitDashboardControls()
-        {
-            cmbChartType = new ComboBox();
-            cmbChartType.Items.AddRange(new object[] { "柱状图", "折线图", "饼图" });
-            cmbChartType.SelectedIndex = 0; 
-            cmbChartType.DropDownStyle = ComboBoxStyle.DropDownList;
-            
-            // [Fix] Move to left-bottom to ensure it is not covered by TrackBar
-            // TrackBar is usually at Top/Left of the panel or fills it.
-            // Let's place ComboBox at Bottom-Left of the panelBottom
-            cmbChartType.Size = new System.Drawing.Size(120, 25);
-            cmbChartType.Location = new System.Drawing.Point(12, 40); 
-            cmbChartType.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
-            
-            cmbChartType.SelectedIndexChanged += CmbChartType_SelectedIndexChanged;
-            this.panelBottom.Controls.Add(cmbChartType);
-            
-            // Critical: Ensure ComboBox is on top of other controls in the panel
-            cmbChartType.BringToFront();
         }
 
         private void CmbChartType_SelectedIndexChanged(object sender, EventArgs e)
@@ -90,7 +41,46 @@ namespace WindowsFormsMap1
                 case "折线图": type = SeriesChartType.Line; break;
                 case "饼图": type = SeriesChartType.Pie; break;
             }
+            // Only update Chart 1
             foreach (var s in chart1.Series) s.ChartType = type;
+        }
+
+        private void InitMyChart()
+        {
+            // ========== Chart 1 (Left): City Counts (Bar/Line/Pie) ==========
+            this.chart1.Series.Clear();
+            Series series1 = new Series("非遗数量");
+            series1.ChartType = SeriesChartType.Column; 
+            series1.ToolTip = "点击查看 #VALX 详情"; 
+            
+            // 预设城市列表
+            string[] cities = new string[] { 
+                "济南市", "青岛市", "淄博市", "枣庄市", "东营市", "烟台市", "潍坊市", "济宁市", 
+                "泰安市", "威海市", "日照市", "临沂市", "德州市", "聊城市", "滨州市", "菏泽市" 
+            };
+            
+            foreach(var city in cities)
+            {
+                series1.Points.AddXY(city, 0); 
+            }
+
+            this.chart1.Series.Add(series1);
+            this.chart1.Titles.Clear();
+            this.chart1.Titles.Add("山东省各市非遗数量统计 (点击柱状图定位)");
+            this.chart1.ChartAreas[0].AxisX.Interval = 1;
+            this.chart1.MouseClick += Chart1_MouseClick;
+
+            // ========== Chart 2 (Right): Category Stats (Pie) ==========
+            this.chart2.Series.Clear();
+            Series series2 = new Series("类别分布");
+            series2.ChartType = SeriesChartType.Pie;
+            series2.IsValueShownAsLabel = true;
+            series2.Label = "#VALX: #VAL"; // Label format: "Category: Count"
+            series2.ToolTip = "#VALX: #VAL (#PERCENT)"; 
+
+            this.chart2.Series.Add(series2);
+            this.chart2.Titles.Clear();
+            this.chart2.Titles.Add("非遗项目类别占比");
         }
 
         private void Chart1_MouseClick(object sender, MouseEventArgs e)
@@ -116,7 +106,7 @@ namespace WindowsFormsMap1
         {
             try
             {
-                if (_mapControl.LayerCount == 0) return;
+                if (_mapControl.LayerCount == 0 || string.IsNullOrEmpty(cityName)) return;
                 string shortName = cityName.Replace("市", "");
 
                 // 1. 寻找最匹配项图层 (优先面图层，其次点图层)
@@ -280,36 +270,50 @@ namespace WindowsFormsMap1
         {
             if (_mainForm == null) return;
 
+            // 1. Update Left Chart (City Counts)
             int totalCount = 0;
-            // Iterate over existing points (Cities) and update their Y values
             foreach (var point in chart1.Series[0].Points)
             {
                 string city = point.AxisLabel;
-                // Call Member D's API with Year
                 int count = _mainForm.GetCountByCity(city, year);
-                
                 point.YValues[0] = count;
                 totalCount += count;
             }
             chart1.Invalidate();
 
-            // [Member B Debug Logic - Visual Feedback]
-            // Update the existing title or add one if missing
-            if (chart1.Titles.Count == 0) chart1.Titles.Add("Status");
-            
-            var title = chart1.Titles[0];
-
-            if (totalCount > 0)
+            if (chart1.Titles.Count > 0)
             {
-                title.Text = $"山东省各市非遗数量统计 (年份: {year} | 总数: {totalCount})";
-                title.ForeColor = System.Drawing.Color.Black;
+                var title = chart1.Titles[0];
+                if (totalCount > 0)
+                {
+                    title.Text = $"各市非遗统计 ({year}) 总数:{totalCount}";
+                    title.ForeColor = System.Drawing.Color.Black;
+                }
+                else
+                {
+                    title.Text = $"[无数据] 请加载非遗数据";
+                    title.ForeColor = System.Drawing.Color.Red;
+                }
+            }
+
+            // 2. Update Right Chart (Category Stats)
+            var catStats = _mainForm.GetCategoryStats(year);
+            chart2.Series[0].Points.Clear();
+            if (catStats.Count > 0)
+            {
+                foreach (var kvp in catStats)
+                {
+                    chart2.Series[0].Points.AddXY(kvp.Key, kvp.Value);
+                }
+                if (chart2.Titles.Count > 0) chart2.Titles[0].Text = $"非遗类别占比 ({year})";
             }
             else
             {
-                // If total is 0, give a hint
-                title.Text = $"[无数据] 请加载非遗SHP (目标字段: 市/Name)";
-                title.ForeColor = System.Drawing.Color.Red;
+                chart2.Series[0].Points.AddXY("无数据", 1); // Placeholder
+                if (chart2.Titles.Count > 0) chart2.Titles[0].Text = "暂无类别数据";
             }
+            chart2.Invalidate();
         }
     }
 }
+
