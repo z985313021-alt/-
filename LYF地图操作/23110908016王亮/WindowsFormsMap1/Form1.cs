@@ -42,7 +42,7 @@ namespace WindowsFormsMap1
 
             // [Member B 集成]
             // InitDashboardModule(); // 用户要求手动触发或静默加载
-            
+
             // 数据看板动态菜单 (Member B) - 已移除：已嵌入“可视化演示”选项卡中
             // ToolStripMenuItem itemDashboard = new ToolStripMenuItem("数据看板(Dashboard)");
             // itemDashboard.Click += (s, ev) => InitDashboardModule();
@@ -57,16 +57,14 @@ namespace WindowsFormsMap1
             // 4. 加载默认演示数据
             LoadDefaultMxd();
 
-            // [Member B 集成修复]
-            // 确保应用程序启动时处于“专业数据视图”(索引 0)。
-            // 这可以防止在未触发布局初始化逻辑的情况下直接启动到可视化选项卡。
-            this.tabControl1.SelectedIndex = 0;
+            // [Member A] 集成：启动默认进入“可视化演示”模式
+            this.tabControl1.SelectedIndex = 2;
         }
 
         private void LoadDefaultMxd()
         {
             string mxdPath = System.IO.Path.Combine(Application.StartupPath, @"..\..\..\初步\非遗.mxd");
-            if (!System.IO.File.Exists(mxdPath)) mxdPath = @"c:\Users\Administrator\Desktop\LYF地图操作\初步\非遗.mxd";
+            if (!System.IO.File.Exists(mxdPath)) mxdPath = @"c:\Users\Administrator\Desktop\团队项目TEAMB\LYF----\LYF地图操作\初步\非遗.mxd";
 
             if (System.IO.File.Exists(mxdPath))
             {
