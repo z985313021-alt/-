@@ -1,3 +1,4 @@
+// [Agent (通用辅助)] Modified: 中文化注释与架构梳理
 using ESRI.ArcGIS.Carto;
 using ESRI.ArcGIS.Geodatabase;
 using System;
@@ -12,15 +13,15 @@ namespace WindowsFormsMap1
     {
         // ================= 编辑功能触发 =================
 
-        // [Member B] Added: Dashboard Module Initialization
+        // [Member B] 新增：看板模块初始化逻辑
         private FormChart _dashboardForm;
         public void InitDashboardModule()
         {
             if (_dashboardForm == null || _dashboardForm.IsDisposed)
             {
                 _dashboardForm = new FormChart();
-                _dashboardForm.SetMapControl(this.axMapControl2); // Pass Map Control
-                _dashboardForm.Owner = this; // Optional: ensure it stays on top or linked
+                _dashboardForm.SetMapControl(this.axMapControl2); // 传递主地图控件
+                _dashboardForm.Owner = this; // 设置所有者以保持同步
             }
             _dashboardForm.Show();
         }
@@ -78,7 +79,7 @@ namespace WindowsFormsMap1
         // ================= 符号化与制图触发 =================
 
         public void ItemSymbolize_Click(object sender, EventArgs e) => new FormSymbolize(axMapControl2, axTOCControl2).Show();
-        public void ItemExport_Click(object sender, EventArgs e) => UIHelper.ExportMap(axMapControl2); // 假设 UIHelper 有导出逻辑
+        public void ItemExport_Click(object sender, EventArgs e) => UIHelper.ExportMap(axMapControl2); // 调用 UIHelper 导出逻辑
         public void 动态标注ToolStripMenuItem_Click(object sender, EventArgs e) => new FormLabeling { CurrentMap = axMapControl2.Map }.ShowDialog();
 
         public void ItemAddNorthArrow_Click(object sender, EventArgs e) => _layoutHelper.AddNorthArrow();

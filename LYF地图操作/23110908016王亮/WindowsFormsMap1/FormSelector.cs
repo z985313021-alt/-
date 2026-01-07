@@ -1,3 +1,4 @@
+// [Agent (通用辅助)] Modified: 全量中文化注释深挖
 using System;
 using System.Windows.Forms;
 using ESRI.ArcGIS.Controls;
@@ -37,7 +38,7 @@ namespace WindowsFormsMap1
                     axSymbologyControl1.StyleClass = esriSymbologyStyleClass.esriStyleClassFillSymbols;
                     break;
                 default:
-                    // 默认 Marker
+                    // 默认点符号 (Marker)
                     axSymbologyControl1.StyleClass = esriSymbologyStyleClass.esriStyleClassMarkerSymbols;
                     break;
             }

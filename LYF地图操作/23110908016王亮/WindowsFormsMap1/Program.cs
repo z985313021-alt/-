@@ -1,4 +1,5 @@
-﻿// 位于 Program.cs 文件中
+﻿// [Agent (通用辅助)] Modified: 全量中文化注释深挖
+// 位于 Program.cs 文件中
 
 using ESRI.ArcGIS.esriSystem; // 必须有这个 using
 using System;

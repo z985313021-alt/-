@@ -1,3 +1,4 @@
+// [Agent (通用辅助)] Modified: 中文化注释与架构梳理
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -111,9 +112,10 @@ namespace WindowsFormsMap1
                     timeClause = $"({realTimeField} LIKE '%{year}%' OR {realTimeField} LIKE '%{batch}%')";
                 }
 
+                // 最终组合 SQL 语句：城市过滤 + 时间过滤
                 string finalWhere = string.IsNullOrEmpty(baseWhere) ? timeClause : $"{baseWhere} AND {timeClause}";
 
-                // 5. 执行查询
+                // 5. 执行查询：利用 DataHelper 封装的统计方法
                 return DataHelper.GetFeatureCount(targetLayer.FeatureClass, finalWhere);
             }
             catch (Exception)
@@ -168,7 +170,7 @@ namespace WindowsFormsMap1
 
                 if (string.IsNullOrEmpty(categoryField)) return stats;
 
-                // 3. 匹配时间字段 (复用逻辑)
+                // 3. 匹配时间字段 (复用上述双模查询逻辑)
                 string realTimeField = "";
                 bool isNumeric = false;
                 int tIdx = fields.FindField("公布时间");
@@ -229,7 +231,7 @@ namespace WindowsFormsMap1
             }
             catch (Exception)
             {
-                // ignore
+                // 静默忽略异常，保证 UI 不会因为数据查询错误而崩溃
             }
             return stats;
         }

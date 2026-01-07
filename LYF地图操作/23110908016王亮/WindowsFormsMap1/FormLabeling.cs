@@ -1,4 +1,5 @@
-﻿using System;
+﻿// [Agent (通用辅助)] Modified: 全量中文化注释深挖
+using System;
 using System.Drawing;
 using System.Windows.Forms;
 using ESRI.ArcGIS.Carto;

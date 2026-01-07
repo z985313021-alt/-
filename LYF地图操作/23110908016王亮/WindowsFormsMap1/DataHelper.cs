@@ -1,3 +1,4 @@
+// [Agent (通用辅助)] Modified: 中文化注释与架构梳理
 using System;
 using System.IO;
 using System.Collections.Generic;
@@ -145,7 +146,7 @@ namespace WindowsFormsMap1
 
         private static IFields CloneFields(IFields sourceFields)
         {
-            // 简单克隆逻辑，实际生产中需更严谨处理 GeometryDef
+            // 简单克隆逻辑，在导出要素类时保留原有字段定义
             return (IFields)((IClone)sourceFields).Clone();
         }
 

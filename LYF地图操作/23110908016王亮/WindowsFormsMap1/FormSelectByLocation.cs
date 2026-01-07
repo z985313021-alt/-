@@ -1,4 +1,5 @@
-﻿using System;
+﻿// [Agent (通用辅助)] Modified: 全量中文化注释深挖
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
@@ -129,16 +130,16 @@ namespace WindowsFormsMap1
                     spatialFilter.SpatialRel = esriSpatialRelEnum.esriSpatialRelWithin;
 
                     break;
-                case 2: // 包含 (contain)
+                case 2: // 包含 (Contain)
                     spatialFilter.SpatialRel = esriSpatialRelEnum.esriSpatialRelContains;
                     break;
-                case 3: // 在...之内 (within)
+                case 3: // 在...之内 (Within)
                     spatialFilter.SpatialRel = esriSpatialRelEnum.esriSpatialRelWithin;
                     break;
-                case 4: // 边界相接 (touch)
+                case 4: // 边界相接 (Touch)
                     spatialFilter.SpatialRel = esriSpatialRelEnum.esriSpatialRelTouches;
                     break;
-                case 5: // 被...穿过 (cross)
+                case 5: // 被...穿过 (Cross)
                     spatialFilter.SpatialRel = esriSpatialRelEnum.esriSpatialRelCrosses;
                     break;
             }

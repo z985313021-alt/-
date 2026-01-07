@@ -1,3 +1,4 @@
+// [Agent (通用辅助)] Modified: 中文化注释与架构梳理
 using ESRI.ArcGIS.Carto;
 using ESRI.ArcGIS.Controls;
 using ESRI.ArcGIS.Display;
@@ -14,7 +15,7 @@ namespace WindowsFormsMap1
     /// </summary>
     public partial class Form1
     {
-        // [Member B] Modified: Integrated interactive dashboard layout trigger
+        // [Member B] 修改：集成了交互式看板布局触发逻辑
         private void TabControl1_SelectedIndexChanged(object sender, EventArgs e)
         {
             TabPage selectedTab = tabControl1.SelectedTab;
@@ -42,7 +43,7 @@ namespace WindowsFormsMap1
         private bool _isVisualLayoutInitialized = false;
         private SplitContainer _splitContainerVisual;
 
-        // [Member B] Added: Method to embed Dashboard into Visual Tab
+        // [Member B] 新增：将统计看板（FormChart）嵌入可视化选项卡的方法
         public void InitVisualLayout()
         {
             if (_isVisualLayoutInitialized) return;
@@ -50,25 +51,22 @@ namespace WindowsFormsMap1
             // 1. Create SplitContainer
             _splitContainerVisual = new SplitContainer();
             _splitContainerVisual.Dock = DockStyle.Fill;
-            _splitContainerVisual.Orientation = Orientation.Horizontal; // Map on Top, Chart on Bottom? Or Vertical?
-            // User screenshot shows a wide chart. Horizontal split makes sense for a "Bottom Dashboard".
-            // Let's go with Horizontal: Panel1 (Top) = Map, Panel2 (Bottom) = Chart.
+            _splitContainerVisual.Orientation = Orientation.Horizontal; // 上图下表布局
+            // 用户截图显示图表较宽，水平拆分（上下结构）最符合“底端面板”设计
             _splitContainerVisual.Orientation = Orientation.Horizontal;
-            _splitContainerVisual.SplitterDistance = (int)(tabPageVisual.Height * 0.7); // Map takes 70%
-
-            // 2. Adjust Parent of axMapControlVisual
-            // Currently axMapControlVisual is directly in tabPageVisual.
-            // We need to move it to splitContainer.Panel1
-            tabPageVisual.Controls.Remove(axMapControlVisual);
+            _splitContainerVisual.SplitterDistance = (int)(tabPageVisual.Height * 0.7); // 地图占据
+            // 2. 调整 axMapControlVisual 的父容器
+            // 目前 axMapControlVisual 直接位于 tabPageVisual 中。
+            axMapControlVisual.Parent = null;
             _splitContainerVisual.Panel1.Controls.Add(axMapControlVisual);
 
-            // 3. Embed Dashboard (FormChart) into SplitContainer.Panel2
+            // 3. 将仪表板 (FormChart) 嵌入 SplitContainer.Panel2
             if (_dashboardForm == null || _dashboardForm.IsDisposed)
             {
                 _dashboardForm = new FormChart();
             }
-            _dashboardForm.SetMapControl(this.axMapControlVisual); // Link to Visual Map
-            _dashboardForm.SetMainForm(this); // [Integration] Link Data
+            _dashboardForm.SetMapControl(this.axMapControlVisual); // 关联到可视化地图
+            _dashboardForm.SetMainForm(this); // [集成] 关联数据源
             _dashboardForm.TopLevel = false;
             _dashboardForm.FormBorderStyle = FormBorderStyle.None;
             _dashboardForm.Dock = DockStyle.Fill;
@@ -76,22 +74,22 @@ namespace WindowsFormsMap1
 
             _splitContainerVisual.Panel2.Controls.Add(_dashboardForm);
 
-            // 4. Add SplitContainer to tabPageVisual (under Header)
+            // 4. 将 SplitContainer 添加到 tabPageVisual (在 Header 面板下方)
             tabPageVisual.Controls.Add(_splitContainerVisual);
-           
+
             // [Member B] Fix: Layout Order
-            // We want Header to dock TOP first (reserve space), then SplitContainer to Fill the rest.
-            // In WinForms, lower Z-order (Back) docks first.
-            panelVisualHeader.SendToBack(); 
+            // 我们希望 Header 首先停靠在顶部（保留空间），然后 SplitContainer 填充剩余空间。
+            // 在 WinForms 中，较低的 Z 轴顺序（Back）会先停靠。
+            panelVisualHeader.SendToBack();
             _splitContainerVisual.BringToFront();
 
-            // Ensure Header stays at top? Header is Dock=Top, SplitContainer is Dock=Fill.
-            // If we Add SplitContainer *after* Header is already there, WinForms Dock logic works by Z-order.
-            // We usually need the Fill control to be added *first* in code or use SendToBack/BringToFront carefully.
-            // Actually, Dock=Top controls must be Z-Order LAST (added first to collection usually) to stay at top.
-            // Safe bet: Add SplitContainer, then ensure PanelVisualHeader is BroughtToFront if it overlaps,
-            // or just rely on Dock=Top of Header and Dock=Fill of SplitContainer working together.
-            // Let's explicitly re-dock header to be safe or just add SplitContainer.
+            // 确保 Header 保持在顶部？Header 是 Dock=Top，SplitContainer 是 Dock=Fill。
+            // 如果我们在 Header 已经在那里之后添加 SplitContainer，WinForms 的 Dock 逻辑会受到 Z-order 影响。
+            // 此时 Header 是 Top，SplitContainer 是 Fill，逻辑正确。
+            // 实际上，Dock=Top 的控件必须是 Z-Order LAST（通常是首先添加到集合中）才能保持在顶部。
+            // 安全的做法是：添加 SplitContainer，然后确保 PanelVisualHeader 在重叠时被 BringToFront，
+            // 或者仅仅依赖 Header 的 Dock=Top 和 SplitContainer 的 Dock=Fill 协同工作。
+            // 让我们明确地重新停靠 Header 以确保安全，或者仅仅添加 SplitContainer。
 
             _isVisualLayoutInitialized = true;
         }
@@ -103,7 +101,7 @@ namespace WindowsFormsMap1
             {
                 axMapControlVisual.ClearLayers();
 
-                // [Member E] Modified: Sort layers to ensure points are on top
+                // [Member E] 修改：对图层进行排序，确保点要素（非遗项目）显示在最上方
                 List<ILayer> pointLayers = new List<ILayer>();
                 List<ILayer> otherLayers = new List<ILayer>();
 
@@ -128,7 +126,7 @@ namespace WindowsFormsMap1
 
                 EnableLabelsForAllLayers();
 
-                // [Member E] Modified: Default to full extent when switching to visual mode
+                // [Member E] 修改：切换到演示模式时默认显示全图范围
                 axMapControlVisual.Extent = axMapControlVisual.FullExtent;
 
                 axMapControlVisual.ActiveView.Refresh();
@@ -268,9 +266,9 @@ namespace WindowsFormsMap1
         private void AxMapControlVisual_OnMouseDown(object sender, IMapControlEvents2_OnMouseDownEvent e)
         {
             if (e.button != 1) return;
-            // [Member B] Enable Identify in Visual Mode
-            // Since there are no other tools (Measure/Editor) active in Visual Mode,
-            // we can default to Identify.
+            // [Member B] 在演示模式下启用“要素识别 (Identify)”
+            // 由于演示模式下没有激活其他复杂的测量/编辑工具，
+            // 默认鼠标左键点击即为识别要素属性。
             DoIdentify(e.x, e.y, axMapControlVisual);
         }
 

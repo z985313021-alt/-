@@ -1,4 +1,5 @@
-﻿using System.Reflection;
+﻿// [Agent (通用辅助)] Modified: 统一化注释署名
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 

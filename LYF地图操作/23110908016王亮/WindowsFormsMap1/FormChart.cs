@@ -1,3 +1,4 @@
+// [Agent (通用辅助)] Modified: 中文化注释与架构梳理
 using System;
 using System.Windows.Forms;
 using System.Windows.Forms.DataVisualization.Charting;
@@ -8,11 +9,11 @@ using System.Drawing;
 namespace WindowsFormsMap1
 {
 
-    // [Member B] Added: Dashboard Form for Charts and Stats
+    // [Member B] 新增：用于图表和统计的数据看板窗体
     public partial class FormChart : Form
     {
         private ESRI.ArcGIS.Controls.AxMapControl _mapControl;
-        private Form1 _mainForm; // [Member B] Reference to Main Form for Data Access
+        private Form1 _mainForm; // [Member B] 引用主窗体以进行数据访问和图表联动
 
         public FormChart()
         {
@@ -25,11 +26,11 @@ namespace WindowsFormsMap1
             _mapControl = mapControl;
         }
 
-        // [Member B] Link to Main Form
+        // [Member B] 链接到主窗体
         public void SetMainForm(Form1 form)
         {
             _mainForm = form;
-            // [Fix] Trigger data update immediately after linking
+            // [修复] 关联后立即触发数据更新
             UpdateChartData(trackBar1.Value);
         }
 
@@ -44,27 +45,27 @@ namespace WindowsFormsMap1
                 case "折线图": type = SeriesChartType.Line; break;
                 case "饼图": type = SeriesChartType.Pie; break;
             }
-            // Only update Chart 1
+            // 仅更新图表 1
             foreach (var s in chart1.Series) s.ChartType = type;
         }
 
         private void InitMyChart()
         {
-            // ========== Chart 1 (Left): City Counts (Bar/Line/Pie) ==========
+            // ========== 图表 1 (左侧): 城市数量统计 (柱状图/折线图/饼图) ==========
             this.chart1.Series.Clear();
             Series series1 = new Series("非遗数量");
-            series1.ChartType = SeriesChartType.Column; 
-            series1.ToolTip = "点击查看 #VALX 详情"; 
-            
-            // 预设城市列表
-            string[] cities = new string[] { 
-                "济南市", "青岛市", "淄博市", "枣庄市", "东营市", "烟台市", "潍坊市", "济宁市", 
-                "泰安市", "威海市", "日照市", "临沂市", "德州市", "聊城市", "滨州市", "菏泽市" 
+            series1.ChartType = SeriesChartType.Column;
+            series1.ToolTip = "点击查看 #VALX 详情";
+
+            // 预设山东省 16 地市列表，用于初始化 X 轴标签
+            string[] cities = new string[] {
+                "济南市", "青岛市", "淄博市", "枣庄市", "东营市", "烟台市", "潍坊市", "济宁市",
+                "泰安市", "威海市", "日照市", "临沂市", "德州市", "聊城市", "滨州市", "菏泽市"
             };
-            
-            foreach(var city in cities)
+
+            foreach (var city in cities)
             {
-                series1.Points.AddXY(city, 0); 
+                series1.Points.AddXY(city, 0);
             }
 
             this.chart1.Series.Add(series1);
@@ -73,35 +74,36 @@ namespace WindowsFormsMap1
             this.chart1.ChartAreas[0].AxisX.Interval = 1;
             this.chart1.MouseClick += Chart1_MouseClick;
 
-            // ========== Chart 2 (Right): Category Stats (Pie) ==========
+            // ========== 图表 2 (右侧): 类别统计 (饼图) ==========
             this.chart2.Series.Clear();
             Series series2 = new Series("类别分布");
             series2.ChartType = SeriesChartType.Pie;
             series2.IsValueShownAsLabel = true;
-            series2.Label = "#VALX: #VAL"; // Label format: "Category: Count"
-            series2.ToolTip = "#VALX: #VAL (#PERCENT)"; 
+            series2.Label = "#VALX: #VAL"; // 标签格式: "类别: 数量"
+            series2.ToolTip = "#VALX: #VAL (#PERCENT)";
 
             this.chart2.Series.Add(series2);
             this.chart2.Titles.Clear();
             this.chart2.Titles.Add("非遗项目类别占比");
         }
 
+        /// <summary>
+        /// 图表 1 点击事件：实现“图文联动”，点击柱状图缩放到对应城市
+        /// </summary>
         private void Chart1_MouseClick(object sender, MouseEventArgs e)
         {
             HitTestResult result = chart1.HitTest(e.X, e.Y);
             if (result.ChartElementType == ChartElementType.DataPoint)
             {
                 var point = chart1.Series[0].Points[result.PointIndex];
-                string cityName = point.AxisLabel; 
-                
-                // [Feedback] Update Title to show interaction is working
-                if (chart1.Titles.Count > 0)
-                {
-                    chart1.Titles[0].Text = $"[正在定位] >>> {cityName}";
-                    chart1.Titles[0].ForeColor = System.Drawing.Color.Blue;
-                }
+                string cityName = point.AxisLabel;
+                _selectedCity = cityName;
 
-                if (_mapControl != null) ZoomToCity(cityName);
+                // [反馈] 更新标题以显示交互已生效
+                this.Text = $"数据看板 - 当前选中: {cityName}";
+
+                // 缩放到选中的城市
+                if (_mainForm != null) _mainForm.ZoomToCity(cityName);
             }
         }
 
@@ -125,28 +127,28 @@ namespace WindowsFormsMap1
 
                     // [修复] 优先考虑行政区划图层（用于城市定位）
                     string ln = layer.Name;
-                    bool isAdminLayer = ln.Contains("行政") || ln.Contains("区划") || ln.Contains("边界") || 
+                    bool isAdminLayer = ln.Contains("行政") || ln.Contains("区划") || ln.Contains("边界") ||
                                        ln.Contains("市县") || ln.Contains("市区") || ln.Contains("区域") ||
                                        ln.Contains("District") || ln.Contains("Admin") ||
-                                       ln.Contains("County") || ln.Contains("City") || 
+                                       ln.Contains("County") || ln.Contains("City") ||
                                        ln.ToLower().Contains("shiqu");
-                    
+
                     // [关键修复] 检查几何类型
                     ESRI.ArcGIS.Geometry.esriGeometryType geomType = layer.FeatureClass.ShapeType;
                     bool isPolygonLayer = (geomType == ESRI.ArcGIS.Geometry.esriGeometryType.esriGeometryPolygon);
-                    
+
                     // 检查是否存在城市字段
                     string tempCityField = "";
                     string[] cityKeys = { "行政名称", "行政名", "市", "City", "CityName", "Name", "NAME", "地市", "所属地区", "地区", "NAME99" };
                     for (int j = 0; j < layer.FeatureClass.Fields.FieldCount; j++)
                     {
                         string fName = layer.FeatureClass.Fields.get_Field(j).Name;
-                        foreach (string k in cityKeys) 
+                        foreach (string k in cityKeys)
                         {
-                            if (fName.Equals(k, StringComparison.OrdinalIgnoreCase)) 
-                            { 
-                                tempCityField = fName; 
-                                break; 
+                            if (fName.Equals(k, StringComparison.OrdinalIgnoreCase))
+                            {
+                                tempCityField = fName;
+                                break;
                             }
                         }
                         if (!string.IsNullOrEmpty(tempCityField)) break;
@@ -169,7 +171,7 @@ namespace WindowsFormsMap1
                         }
                     }
                 }
-                
+
                 // 如果没找到面图层，使用备用图层（点图层）
                 if (targetLayer == null && fallbackLayer != null)
                 {
@@ -177,13 +179,16 @@ namespace WindowsFormsMap1
                     realCityField = fallbackCityField;
                 }
 
-                // Fallback to layer 0 if needed
-                if (targetLayer == null) targetLayer = _mapControl.get_Layer(0) as ESRI.ArcGIS.Carto.IFeatureLayer;
+                // 如果找不到指定图层，回退到图层 0
+                if (targetLayer == null)
+                {
+                    if (_mapControl.LayerCount > 0) targetLayer = _mapControl.get_Layer(0) as ESRI.ArcGIS.Carto.IFeatureLayer;
+                }
                 if (targetLayer == null || string.IsNullOrEmpty(realCityField)) return;
 
                 // 2. 执行空间定位
                 ESRI.ArcGIS.Geodatabase.IQueryFilter queryFilter = new ESRI.ArcGIS.Geodatabase.QueryFilterClass();
-                queryFilter.WhereClause = $"{realCityField} = '{cityName}' OR {realCityField} LIKE '%{shortName}%'"; 
+                queryFilter.WhereClause = $"{realCityField} = '{cityName}' OR {realCityField} LIKE '%{shortName}%'";
 
                 ESRI.ArcGIS.Geodatabase.IFeatureCursor cursor = targetLayer.FeatureClass.Search(queryFilter, false);
                 ESRI.ArcGIS.Geodatabase.IFeature feature = cursor.NextFeature();
@@ -200,19 +205,19 @@ namespace WindowsFormsMap1
                         }
                         else
                         {
-                            envelope.Expand(1.5, 1.5, true); 
+                            envelope.Expand(1.5, 1.5, true);
                         }
-                        
+
                         _mapControl.ActiveView.Extent = envelope;
                         _mapControl.ActiveView.Refresh();
-                        
+
                         // 成功反馈
                         if (chart1.Titles.Count > 0)
                         {
                             chart1.Titles[0].Text = $"山东省各市非遗数量统计 (已定位: {cityName})";
                             chart1.Titles[0].ForeColor = System.Drawing.Color.Green;
                         }
-                        
+
                         // 尝试高亮(如果失败不影响主流程)
                         try
                         {
@@ -242,7 +247,7 @@ namespace WindowsFormsMap1
                         chart1.Titles[0].ForeColor = System.Drawing.Color.OrangeRed;
                     }
                 }
-                
+
                 if (cursor != null) System.Runtime.InteropServices.Marshal.ReleaseComObject(cursor);
             }
             catch (Exception)
@@ -261,8 +266,8 @@ namespace WindowsFormsMap1
             int year = trackBar1.Value;
             this.lblTime.Text = $"当前年份: {year}";
             UpdateChartData(year);
-            
-            // [Member B] 同步过滤地图要素
+
+            // [Member B] 同步过滤地图要素，实现时间维度上的动态演示
             if (_mainForm != null)
             {
                 _mainForm.FilterMapByYear(year);
@@ -273,7 +278,7 @@ namespace WindowsFormsMap1
         {
             if (_mainForm == null) return;
 
-            // 1. Update Left Chart (City Counts)
+            // 1. 更新左侧图表 (城市数量统计)
             int totalCount = 0;
             foreach (var point in chart1.Series[0].Points)
             {
@@ -298,8 +303,9 @@ namespace WindowsFormsMap1
                     title.ForeColor = System.Drawing.Color.Red;
                 }
             }
+            chart1.Invalidate();
 
-            // 2. Update Right Chart (Category Stats)
+            // 2. 更新右侧图表 (项目类别占比)
             var catStats = _mainForm.GetCategoryStats(year);
             chart2.Series[0].Points.Clear();
             if (catStats.Count > 0)
@@ -354,12 +360,12 @@ namespace WindowsFormsMap1
                         sb.AppendLine("Year: " + trackBar1.Value);
                         sb.AppendLine("Generated on: " + DateTime.Now.ToString());
                         sb.AppendLine();
-                        
+
                         sb.AppendLine("--- City Statistics ---");
                         // Iterate chart1 series
-                        if(chart1.Series.Count > 0)
+                        if (chart1.Series.Count > 0)
                         {
-                            foreach(var dp in chart1.Series[0].Points)
+                            foreach (var dp in chart1.Series[0].Points)
                             {
                                 sb.AppendLine($"{dp.AxisLabel}: {dp.YValues[0]}");
                             }
@@ -368,11 +374,11 @@ namespace WindowsFormsMap1
 
                         sb.AppendLine("--- Category Statistics ---");
                         // Iterate chart2 series
-                        if(chart2.Series.Count > 0)
+                        if (chart2.Series.Count > 0)
                         {
-                            foreach(var dp in chart2.Series[0].Points)
+                            foreach (var dp in chart2.Series[0].Points)
                             {
-                                sb.AppendLine($"{dp.AxisLabel}: {dp.YValues[0]}"); 
+                                sb.AppendLine($"{dp.AxisLabel}: {dp.YValues[0]}");
                             }
                         }
 

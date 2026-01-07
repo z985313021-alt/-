@@ -1,3 +1,4 @@
+// [Agent (通用辅助)] Modified: 全量中文化注释深挖
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -98,7 +99,7 @@ namespace WindowsFormsMap1
             if (cmbClassField.Items.Count > 0) cmbClassField.SelectedIndex = 0;
         }
 
-        #region Simple Renderer (Tab 1)
+        #region 简单渲染 (Tab 1)
 
         private void UpdateSimplePreview()
         {
@@ -164,23 +165,23 @@ namespace WindowsFormsMap1
 
         #endregion
 
-        // ... 后续逻辑 (Unique, Class Breaks, Apply) 会在下一次写入 ...
+        // ... 后续逻辑 (唯一值、分级、应用)
 
-        #region Unique Value Renderer (Tab 2)
+        #region 唯一值渲染 (Tab 2)
 
         private void btnUniqueAddAll_Click(object sender, EventArgs e)
         {
             if (cmbUniqueField.SelectedItem == null) return;
             string fieldName = cmbUniqueField.SelectedItem.ToString();
 
-            // 获取唯一值
+            // 获取唯一值逻辑
             try
             {
                 lvUnique.Items.Clear();
                 int fieldIndex = _currentLayer.FeatureClass.Fields.FindField(fieldName);
                 if (fieldIndex == -1) return;
 
-                // 使用 DataStatistics 获取唯一值
+                // 使用 DataStatistics 获取唯一值集合
                 ICursor cursor = _currentLayer.Search(null, false) as ICursor;
                 IDataStatistics dataStats = new DataStatisticsClass();
                 dataStats.Cursor = cursor;
@@ -196,12 +197,12 @@ namespace WindowsFormsMap1
                     object val = uniqueValues.Current;
                     if (val == null) continue;
 
-                    ListViewItem item = new ListViewItem(val.ToString()); // 值
-                    item.SubItems.Add(val.ToString()); // 标签
+                    ListViewItem item = new ListViewItem(val.ToString()); // 存储值
+                    item.SubItems.Add(val.ToString()); // 存储标签内容
 
-                    // 随机颜色符号
+                    // 为该值生成随机颜色符号
                     ISymbol symbol = CreateSimpleSymbol(_currentLayer.FeatureClass.ShapeType, GetRandomColor(rnd));
-                    item.Tag = symbol; // 存储符号到 Tag
+                    item.Tag = symbol; // 存储符号到 Tag 供后续渲染使用
 
                     lvUnique.Items.Add(item);
                 }
@@ -229,9 +230,9 @@ namespace WindowsFormsMap1
 
         #endregion
 
-        #region Class Breaks Renderer (Tab 3)
+        #region 分级渲染 (Tab 3)
 
-        // 简单实现：等间距分级
+        // 简单实现：等间距分级算法
         private void CalculateClassBreaks()
         {
             if (cmbClassField.SelectedItem == null) return;
@@ -300,7 +301,7 @@ namespace WindowsFormsMap1
 
         #endregion
 
-        #region Apply Logic
+        #region 应用渲染逻辑
 
         private void btnApply_Click(object sender, EventArgs e)
         {
@@ -376,7 +377,7 @@ namespace WindowsFormsMap1
 
         #endregion
 
-        #region Helpers
+        #region 助手方法
 
         private ISymbol CreateSimpleSymbol(esriGeometryType type, IColor color)
         {
