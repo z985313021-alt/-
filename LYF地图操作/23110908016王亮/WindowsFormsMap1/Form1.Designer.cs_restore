@@ -1,0 +1,46 @@
+        private System.Windows.Forms.ToolStripMenuItem 清除选择集ToolStripMenuItem;
+        private System.Windows.Forms.Splitter splitter1;
+        private System.Windows.Forms.Splitter splitter2;
+        private ESRI.ArcGIS.Controls.AxTOCControl axTOCControl2;
+        private ESRI.ArcGIS.Controls.AxMapControl axMapControl2;
+        private ESRI.ArcGIS.Controls.AxLicenseControl axLicenseControl3;
+        private System.Windows.Forms.ToolStripMenuItem 清楚选择集ToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem 刷新至初始视图ToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem 漫游ToolStripMenuItem;
+        private System.Windows.Forms.ToolStripMenuItem 动态标注ToolStripMenuItem;
+
+        // [迁移] UIHelper 菜单项
+        private System.Windows.Forms.ToolStripMenuItem menuMapping;
+        private System.Windows.Forms.ToolStripMenuItem itemSymbolize;
+        private System.Windows.Forms.ToolStripMenuItem itemExport;
+        private System.Windows.Forms.ToolStripMenuItem itemLabel;
+
+        private System.Windows.Forms.ToolStripMenuItem menuQuery;
+        private System.Windows.Forms.ToolStripMenuItem itemDataQuery;
+        private System.Windows.Forms.ToolStripMenuItem itemSpatialQuery;
+
+        private System.Windows.Forms.ToolStripMenuItem menuAnalysis;
+        private System.Windows.Forms.ToolStripMenuItem itemBuffer;
+        private System.Windows.Forms.ToolStripMenuItem itemOverlay;
+
+        private System.Windows.Forms.ToolStripMenuItem menuLayout;
+        private System.Windows.Forms.ToolStripMenuItem itemNorthArrow;
+        private System.Windows.Forms.ToolStripMenuItem itemScaleBar;
+        private System.Windows.Forms.ToolStripMenuItem itemLegend;
+
+        private System.Windows.Forms.ToolStripMenuItem menuEditing;
+        private System.Windows.Forms.ToolStripMenuItem itemStartEdit;
+        private System.Windows.Forms.ToolStripMenuItem itemSaveEdit;
+        private System.Windows.Forms.ToolStripMenuItem itemStopEdit;
+        private System.Windows.Forms.ToolStripSeparator toolStripSeparatorEdit;
+        private System.Windows.Forms.ToolStripMenuItem itemCreateFeature;
+        private System.Windows.Forms.ToolStripMenuItem itemUndo;
+
+        // [新增] 布局视图相关控件
+        private System.Windows.Forms.TabControl tabControl1;
+        private System.Windows.Forms.TabPage tabPage1;
+        private System.Windows.Forms.TabPage tabPage2;
+        private ESRI.ArcGIS.Controls.AxPageLayoutControl axPageLayoutControl1;
+        private ESRI.ArcGIS.Controls.AxLicenseControl axLicenseControl1;
+    }
+}
