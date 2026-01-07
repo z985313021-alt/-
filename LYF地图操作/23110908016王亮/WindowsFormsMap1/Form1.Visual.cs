@@ -32,7 +32,7 @@ namespace WindowsFormsMap1
             this.statusStrip1.Visible = true;
 
             if (isLayout) _layoutHelper.SynchronizeMap();
-            if (isVisual) 
+            if (isVisual)
             {
                 SyncToVisualMode();
                 if (!_isVisualLayoutInitialized) InitVisualLayout(); // Ensure layout is set
@@ -73,13 +73,13 @@ namespace WindowsFormsMap1
             _dashboardForm.FormBorderStyle = FormBorderStyle.None;
             _dashboardForm.Dock = DockStyle.Fill;
             _dashboardForm.Visible = true;
-            
+
             _splitContainerVisual.Panel2.Controls.Add(_dashboardForm);
 
             // 4. Add SplitContainer to tabPageVisual (under Header)
             tabPageVisual.Controls.Add(_splitContainerVisual);
             _splitContainerVisual.BringToFront(); // Ensure it's visible
-            
+
             // Ensure Header stays at top? Header is Dock=Top, SplitContainer is Dock=Fill.
             // If we Add SplitContainer *after* Header is already there, WinForms Dock logic works by Z-order.
             // We usually need the Fill control to be added *first* in code or use SendToBack/BringToFront carefully.
@@ -87,7 +87,7 @@ namespace WindowsFormsMap1
             // Safe bet: Add SplitContainer, then ensure PanelVisualHeader is BroughtToFront if it overlaps,
             // or just rely on Dock=Top of Header and Dock=Fill of SplitContainer working together.
             // Let's explicitly re-dock header to be safe or just add SplitContainer.
-            
+
             _isVisualLayoutInitialized = true;
         }
 
@@ -97,19 +97,34 @@ namespace WindowsFormsMap1
             try
             {
                 axMapControlVisual.ClearLayers();
-                // [修复] 必须正向遍历添加图层，否则底图会覆盖在上层
+
+                // [Member E] Modified: Sort layers to ensure points are on top
+                List<ILayer> pointLayers = new List<ILayer>();
+                List<ILayer> otherLayers = new List<ILayer>();
+
                 for (int i = 0; i < axMapControl2.LayerCount; i++)
                 {
-                    axMapControlVisual.AddLayer(axMapControl2.get_Layer(i));
+                    ILayer layer = axMapControl2.get_Layer(i);
+                    IFeatureLayer fl = layer as IFeatureLayer;
+                    if (fl != null && fl.FeatureClass != null && fl.FeatureClass.ShapeType == esriGeometryType.esriGeometryPoint)
+                    {
+                        pointLayers.Add(layer);
+                    }
+                    else
+                    {
+                        otherLayers.Add(layer);
+                    }
                 }
+
+                // Add background layers first
+                foreach (var layer in otherLayers) axMapControlVisual.AddLayer(layer);
+                // Add point layers last (on top)
+                foreach (var layer in pointLayers) axMapControlVisual.AddLayer(layer);
 
                 EnableLabelsForAllLayers();
 
-                // 同步当前视图范围
-                if (axMapControl2.LayerCount > 0)
-                {
-                    axMapControlVisual.Extent = axMapControl2.Extent;
-                }
+                // [Member E] Modified: Default to full extent when switching to visual mode
+                axMapControlVisual.Extent = axMapControlVisual.FullExtent;
 
                 axMapControlVisual.ActiveView.Refresh();
                 axMapControlVisual.Refresh();
@@ -240,60 +255,8 @@ namespace WindowsFormsMap1
 
         private void AxMapControlVisual_OnMouseDown(object sender, IMapControlEvents2_OnMouseDownEvent e)
         {
-            // 仅在左键点击 且 没有启用任何特殊工具时触发
-            if (e.button != 1 || axMapControlVisual.CurrentTool != null) return;
-            
-            IActiveView av = axMapControlVisual.ActiveView;
-            IPoint pt = av.ScreenDisplay.DisplayTransformation.ToMapPoint(e.x, e.y);
-            double tol = 5 * av.ScreenDisplay.DisplayTransformation.Resolution;
-            IEnvelope env = pt.Envelope; env.Expand(tol, tol, false);
-
-            // [修复] 1. 先清除之前的所有选择，避免全选错觉
-            axMapControlVisual.Map.ClearSelection();
-
-            // [修复] 2. 智能锁定非遗图层
-            IFeatureLayer targetLayer = null;
-            for (int i = 0; i < axMapControlVisual.LayerCount; i++)
-            {
-                ILayer layer = axMapControlVisual.get_Layer(i);
-                if (layer is IFeatureLayer && layer.Visible)
-                {
-                    string ln = layer.Name;
-                    if (ln.Contains("非遗") || ln.Contains("名录") || ln.Contains("项目") || ln.Contains("ICH"))
-                    {
-                        targetLayer = layer as IFeatureLayer;
-                        break;
-                    }
-                }
-            }
-
-            // [修复] 3. 仅从目标图层选择，防止点到背景多边形
-            if (targetLayer != null)
-            {
-                IFeatureSelection featSel = targetLayer as IFeatureSelection;
-                ISpatialFilter spatialFilter = new SpatialFilterClass();
-                spatialFilter.Geometry = env;
-                spatialFilter.SpatialRel = esriSpatialRelEnum.esriSpatialRelIntersects;
-                featSel.SelectFeatures(spatialFilter, esriSelectionResultEnum.esriSelectionResultNew, false);
-            }
-            else
-            {
-                // 如果没找到特定图层，才允许全图查询
-                axMapControlVisual.Map.SelectByShape(env, null, false);
-            }
-
-            // 刷新选择集显示
-            axMapControlVisual.ActiveView.PartialRefresh(esriViewDrawPhase.esriViewGeoSelection, null, null);
-
-            IEnumFeature enumFeat = axMapControlVisual.Map.FeatureSelection as IEnumFeature;
-            enumFeat.Reset();
-            IFeature feat = enumFeat.Next();
-            
-            // 只有当选中的要素字段较多（即非简单边界）时才弹出详情
-            if (feat != null && feat.Fields.FieldCount > 5)
-            {
-                new FormICHDetails(feat).ShowDialog();
-            }
+            // [Member E] Modified: Removed click-to-identify logic to prevent accidental popups and selection of background layers.
+            // Map navigation tools (Pan, Zoom) in the toolbar should be used instead.
         }
 
         /// <summary>
