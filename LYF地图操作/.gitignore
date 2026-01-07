@@ -6,5 +6,4 @@ obj/
 *.user
 *.pdb
 *.exe
-*.dll
 *.cache
