@@ -1,12 +1,5 @@
-// [Agent (通用辅助)] Modified: 全量中文化注释深挖
 using System;
 using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
-using System.Drawing;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows.Forms;
 using ESRI.ArcGIS.Geodatabase;
 
@@ -19,47 +12,34 @@ namespace WindowsFormsMap1
         public FormICHDetails(IFeature feature)
         {
             InitializeComponent();
-            this._feature = feature;
-            LoadProperties();
+            _feature = feature;
+            LoadAttributes();
         }
 
-        private void LoadProperties()
+        private void LoadAttributes()
         {
-            try
+            if (_feature == null) return;
+
+            // 创建数据源
+            var dataList = new List<object>();
+
+            IFields fields = _feature.Fields;
+            for (int i = 0; i < fields.FieldCount; i++)
             {
-                DataTable dt = new DataTable();
-                dt.Columns.Add("字段项");
-                dt.Columns.Add("内容值");
+                IField field = fields.get_Field(i);
+                // 跳过Shape几何字段，显示无意义
+                if (field.Type == esriFieldType.esriFieldTypeGeometry) continue;
 
-                if (_feature == null) return;
-                IFields fields = _feature.Fields;
-                for (int i = 0; i < fields.FieldCount; i++)
-                {
-                    IField field = fields.get_Field(i);
-                    // 过滤掉几个不适合展示的内部字段
-                    if (field.Type == esriFieldType.esriFieldTypeGeometry ||
-                        field.Name.ToLower() == "shape" ||
-                        field.Name.ToLower() == "fid") continue;
-
-                    object val = _feature.get_Value(i);
-                    dt.Rows.Add(field.AliasName, (val == null || val is DBNull) ? "" : val.ToString());
-                }
-
-                dataGridView1.DataSource = dt;
-
-                // [Member A] 修改：修复当字段值为 null 时的 NullReferenceException
-                // 尝试抓取名称作为标题显示
-                int nameIdx = _feature.Fields.FindField("名称");
-                if (nameIdx != -1)
-                {
-                    object nameVal = _feature.get_Value(nameIdx);
-                    this.Text = "非遗详情: " + ((nameVal == null || nameVal is DBNull) ? "未知" : nameVal.ToString());
-                }
+                string fieldName = field.AliasName; // 显示别名
+                object value = _feature.get_Value(i);
+                
+                // 处理一些特殊类型显示
+                string valueStr = (value != null) ? value.ToString() : "";
+                
+                dataList.Add(new { 字段项 = fieldName, 内容值 = valueStr });
             }
-            catch (Exception ex)
-            {
-                MessageBox.Show("加载详情失败: " + ex.Message);
-            }
+
+            dataGridView1.DataSource = dataList;
         }
 
         private void BtnClose_Click(object sender, EventArgs e)
@@ -97,7 +77,7 @@ namespace WindowsFormsMap1
                     // 如果没找到名称字段，尝试找索引为1或2的字符串字段作为替补
                     for (int i = 0; i < fields.FieldCount; i++)
                     {
-                        if (fields.get_Field(i).Type == esriFieldType.esriFieldTypeString && i > 0)
+                        if (fields.get_Field(i).Type == esriFieldType.esriFieldTypeString && i > 0 && fields.get_Field(i).Name != "Shape")
                         {
                             nameField = fields.get_Field(i).Name;
                             break;
@@ -112,7 +92,14 @@ namespace WindowsFormsMap1
                     if (val != null && val != DBNull.Value)
                     {
                         string keyword = val.ToString();
-                        string url = "https://www.baidu.com/s?wd=" + System.Uri.EscapeDataString("非遗 " + keyword);
+                        // 智能判断上下文
+                        string queryPrefix = "山东非遗 ";
+                        if (keyword.Contains("市") || keyword.Contains("县") || keyword.Contains("区"))
+                        {
+                            queryPrefix = ""; // 如果是行政区名，就不强制加非遗前缀，或者加"非遗情况"
+                        }
+                        
+                        string url = "https://www.baidu.com/s?wd=" + System.Uri.EscapeDataString(queryPrefix + keyword);
                         System.Diagnostics.Process.Start(url);
                     }
                     else

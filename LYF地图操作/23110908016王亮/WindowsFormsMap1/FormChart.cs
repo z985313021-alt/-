@@ -312,12 +312,17 @@ namespace WindowsFormsMap1
             int totalCount = 0;
             foreach (var point in chart1.Series[0].Points)
             {
-                string city = point.AxisLabel;
+                // [优化] 优先取 AxisLabel，若为空则取 XValue (针对不同 AddXY 重载)
+                string city = !string.IsNullOrEmpty(point.AxisLabel) ? point.AxisLabel : point.XValue.ToString();
+                
+                // 再次清洗城市名，确保匹配成功
                 int count = _mainForm.GetCountByCity(city, year);
                 point.YValues[0] = count;
                 totalCount += count;
             }
+            chart1.Series[0].IsValueShownAsLabel = true; // 显示数值标签
             chart1.Invalidate();
+            chart1.Update(); // 强制重绘
 
             if (chart1.Titles.Count > 0)
             {
