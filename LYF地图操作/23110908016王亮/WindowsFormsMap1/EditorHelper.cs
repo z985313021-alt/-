@@ -1,3 +1,4 @@
+// [Agent (通用辅助)] Modified: 中文化注释与架构梳理
 using System;
 using System.Windows.Forms;
 using ESRI.ArcGIS.Carto;
@@ -100,6 +101,7 @@ namespace WindowsFormsMap1
                  bool hasEdits = _workspaceEdit.IsBeingEdited(); 
                  if(hasEdits)
                  {
+                     // StopEditing(true) 才是真正物理保存到磁盘
                      _workspaceEdit.StopEditing(true);
                      _workspaceEdit.StartEditing(true);
                  }

@@ -1,3 +1,4 @@
+// [Agent (通用辅助)] Modified: 全量中文化注释深挖
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -36,8 +37,8 @@ namespace WindowsFormsMap1
                 {
                     IField field = fields.get_Field(i);
                     // 过滤掉几个不适合展示的内部字段
-                    if (field.Type == esriFieldType.esriFieldTypeGeometry || 
-                        field.Name.ToLower() == "shape" || 
+                    if (field.Type == esriFieldType.esriFieldTypeGeometry ||
+                        field.Name.ToLower() == "shape" ||
                         field.Name.ToLower() == "fid") continue;
 
                     object val = _feature.get_Value(i);
@@ -45,9 +46,9 @@ namespace WindowsFormsMap1
                 }
 
                 dataGridView1.DataSource = dt;
-                
-                // [Member A] Modified: Fix NullReferenceException when field value is null
-                // 尝试抓取名称作为标题
+
+                // [Member A] 修改：修复当字段值为 null 时的 NullReferenceException
+                // 尝试抓取名称作为标题显示
                 int nameIdx = _feature.Fields.FindField("名称");
                 if (nameIdx != -1)
                 {
@@ -68,14 +69,14 @@ namespace WindowsFormsMap1
 
         private void btnSearch_Click(object sender, EventArgs e)
         {
-             try
+            try
             {
                 if (_feature == null) return;
 
                 // 尝试找名称字段，支持多种命名
                 string nameField = "";
                 string[] possibleNames = { "名称", "Name", "Title", "项目名称", "非遗名", "ProjectName" };
-                
+
                 IFields fields = _feature.Fields;
                 for (int i = 0; i < fields.FieldCount; i++)
                 {

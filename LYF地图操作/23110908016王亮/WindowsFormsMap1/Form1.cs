@@ -1,4 +1,5 @@
-﻿using ESRI.ArcGIS.Carto;
+﻿// [Agent (通用辅助)] Modified: 中文化注释与架构梳理
+using ESRI.ArcGIS.Carto;
 using ESRI.ArcGIS.Controls;
 using ESRI.ArcGIS.Display;
 using System;
@@ -39,10 +40,10 @@ namespace WindowsFormsMap1
             _ui = new UIHelper(this, axMapControl2, menuStrip1);
             // 不再手动生成运行时 UI，回归设计器
 
-            // [Member B Integration]
-            // InitDashboardModule(); // User requested manual trigger or silent load
-            
-            // Dynamic Menu for Dashboard (Member B) - Removed: Embedded into Visual Tab
+            // [Member B 集成]
+            // InitDashboardModule(); // 用户要求手动触发或静默加载
+
+            // 数据看板动态菜单 (Member B) - 已移除：已嵌入“可视化演示”选项卡中
             // ToolStripMenuItem itemDashboard = new ToolStripMenuItem("数据看板(Dashboard)");
             // itemDashboard.Click += (s, ev) => InitDashboardModule();
             // menuStrip1.Items.Add(itemDashboard);
@@ -56,21 +57,26 @@ namespace WindowsFormsMap1
             // 4. 加载默认演示数据
             LoadDefaultMxd();
 
-            // [Member B Integration Fix]
-            // Ensure app starts on Data View (Index 0). 
-            // This prevents starting on Visual Tab without triggering the layout initialization logic.
-            this.tabControl1.SelectedIndex = 0;
+            // [Member E] 集成：初始化鹰眼图
+            this.InitEagleEye();
+
+            // [Member A] 集成：启动默认进入“可视化演示”模式
+            this.tabControl1.SelectedIndex = 2;
         }
 
         private void LoadDefaultMxd()
         {
             string mxdPath = System.IO.Path.Combine(Application.StartupPath, @"..\..\..\初步\非遗.mxd");
-            if (!System.IO.File.Exists(mxdPath)) mxdPath = @"c:\Users\Administrator\Desktop\LYF地图操作\初步\非遗.mxd";
+            if (!System.IO.File.Exists(mxdPath)) mxdPath = @"c:\Users\Administrator\Desktop\团队项目TEAMB\LYF----\LYF地图操作\初步\非遗.mxd";
 
             if (System.IO.File.Exists(mxdPath))
             {
                 axMapControl2.LoadMxFile(mxdPath);
+                axMapControl2.Extent = axMapControl2.FullExtent; // 默认全图显示
                 axMapControl2.ActiveView.Refresh();
+
+                // [Member E] 同步鹰眼底图
+                this.SyncEagleEyeLayers();
 
                 // [重要] 可视化演示页在 Designer 中的索引是 2
                 // 强制触发一次 IndexChanged 以执行 UI 显隐逻辑

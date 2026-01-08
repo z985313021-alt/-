@@ -1,3 +1,4 @@
+// [Agent (通用辅助)] Modified: 中文化注释与架构梳理
 using System;
 using System.Drawing;
 using System.Windows.Forms;
@@ -61,6 +62,21 @@ namespace WindowsFormsMap1
                 }
             }
             catch (Exception ex) { MessageBox.Show("导出失败：" + ex.Message); }
+        }
+
+        /// <summary>
+        /// [Agent (通用辅助)] Added: 深度克隆地图对象
+        /// 使用 IObjectCopy 接口实现地图对象的无干扰同步
+        /// </summary>
+        public static ESRI.ArcGIS.Carto.IMap CloneMap(ESRI.ArcGIS.Carto.IMap sourceMap)
+        {
+            try
+            {
+                ESRI.ArcGIS.esriSystem.IObjectCopy objectCopy = new ESRI.ArcGIS.esriSystem.ObjectCopyClass();
+                object clonedObject = objectCopy.Copy(sourceMap);
+                return clonedObject as ESRI.ArcGIS.Carto.IMap;
+            }
+            catch { return null; }
         }
     }
 }

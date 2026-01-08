@@ -1,3 +1,4 @@
+// [Agent (通用辅助)] Modified: 中文化注释与架构梳理
 using System;
 using System.Windows.Forms;
 using ESRI.ArcGIS.Carto;

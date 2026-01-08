@@ -181,4 +181,4 @@ C:\Users\Administrator\Desktop\团队项目TEAMB\LYF----\LYF地图操作\2311090
 C:\Users\Administrator\Desktop\团队项目TEAMB\LYF----\LYF地图操作\23110908016王亮\WindowsFormsMap1\obj\Debug\WindowsFormsMap1.csproj.CoreCompileInputs.cache
 C:\Users\Administrator\Desktop\团队项目TEAMB\LYF----\LYF地图操作\23110908016王亮\WindowsFormsMap1\obj\Debug\WindowsFormsMap1.exe
 C:\Users\Administrator\Desktop\团队项目TEAMB\LYF----\LYF地图操作\23110908016王亮\WindowsFormsMap1\obj\Debug\WindowsFormsMap1.pdb
-C:\Users\Administrator\Desktop\团队项目TEAMB\LYF----\LYF地图操作\23110908016王亮\WindowsFormsMap1\obj\Debug\WindowsF.6A5DEAB6.Up2Date
+C:\Users\Administrator\Desktop\团队项目TEAMB\LYF----\LYF地图操作\23110908016王亮\WindowsFormsMap1\obj\Debug\WindowsFormsMap1.csproj.CopyComplete

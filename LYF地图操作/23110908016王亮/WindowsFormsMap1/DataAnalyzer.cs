@@ -1,3 +1,4 @@
+// [Agent (通用辅助)] Modified: 全量中文化注释深挖
 using ESRI.ArcGIS.Carto;
 using ESRI.ArcGIS.Geodatabase;
 using ESRI.ArcGIS.Geometry;

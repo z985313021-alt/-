@@ -1,3 +1,4 @@
+// [Agent (通用辅助)] Modified: 全量中文化注释深挖
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -25,7 +26,7 @@ namespace WindowsFormsMap1
         private void btnBrowse_Click(object sender, EventArgs e)
         {
             OpenFileDialog ofd = new OpenFileDialog();
-            ofd.Filter = "CSV Files (*.csv)|*.csv|Text Files (*.txt)|*.txt";
+            ofd.Filter = "CSV 文件 (*.csv)|*.csv|文本文件 (*.txt)|*.txt";
             if (ofd.ShowDialog() == DialogResult.OK)
             {
                 txtFilePath.Text = ofd.FileName;
@@ -65,7 +66,7 @@ namespace WindowsFormsMap1
         private void btnBrowseOutput_Click(object sender, EventArgs e)
         {
             SaveFileDialog sfd = new SaveFileDialog();
-            sfd.Filter = "Shapefile (*.shp)|*.shp";
+            sfd.Filter = "Shapefile 矢量文件 (*.shp)|*.shp";
             if (sfd.ShowDialog() == DialogResult.OK)
             {
                 txtOutput.Text = sfd.FileName;
@@ -176,20 +177,20 @@ namespace WindowsFormsMap1
             oidFieldEdit.Type_2 = esriFieldType.esriFieldTypeOID;
             fieldsEdit.AddField(oidField);
 
-            // Geometry 字段
+            // 几何 (Geometry) 字段
             IField geoField = new FieldClass();
             IFieldEdit geoFieldEdit = (IFieldEdit)geoField;
             geoFieldEdit.Name_2 = "Shape";
             geoFieldEdit.Type_2 = esriFieldType.esriFieldTypeGeometry;
 
-            // 定义几何类型 - 点
+            // 定义几何类型为点要素
             IGeometryDef geometryDef = new GeometryDefClass();
             IGeometryDefEdit geometryDefEdit = (IGeometryDefEdit)geometryDef;
             geometryDefEdit.GeometryType_2 = esriGeometryType.esriGeometryPoint;
             
-            // 空间参考 - 未知
+            // 空间参考设定（默认使用未知坐标系，用户可后续投影）
             ISpatialReferenceFactory spatialReferenceFactory = new SpatialReferenceEnvironmentClass();
-            ISpatialReference spatialReference = new UnknownCoordinateSystemClass(); // 暂时使用未知坐标系
+            ISpatialReference spatialReference = new UnknownCoordinateSystemClass(); 
             geometryDefEdit.SpatialReference_2 = spatialReference;
 
             geoFieldEdit.GeometryDef_2 = geometryDef;
