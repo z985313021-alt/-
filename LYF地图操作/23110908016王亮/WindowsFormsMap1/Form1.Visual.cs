@@ -161,6 +161,16 @@ namespace WindowsFormsMap1
                 axMapControlVisual.CurrentTool = cmd as ITool;
             };
 
+            // 2.1 [Agent Add] 联网搜索
+            var btnWebSearch = CreateNavButton("联网搜索");
+            btnWebSearch.Click += (s, e) =>
+            {
+                // 清空当前工具，进入自定义搜索模式
+                axMapControlVisual.CurrentTool = null;
+                // 设置鼠标样式为“探询/搜索”状 (使用 Crosshair)
+                axMapControlVisual.MousePointer = esriControlsMousePointer.esriPointerCrosshair;
+            };
+
             // 3. 漫游
             var btnPan = CreateNavButton("漫游");
             btnPan.Click += (s, e) =>
@@ -209,6 +219,7 @@ namespace WindowsFormsMap1
             // 按顺序添加到工具栏
             _panelMapToolbar.Controls.Add(btnPointer);
             _panelMapToolbar.Controls.Add(btnIdentify);
+            _panelMapToolbar.Controls.Add(btnWebSearch); // [Fix] Add missing button
             _panelMapToolbar.Controls.Add(btnPan);
             _panelMapToolbar.Controls.Add(btnZoomIn);
             _panelMapToolbar.Controls.Add(btnZoomOut);
