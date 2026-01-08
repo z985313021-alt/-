@@ -79,4 +79,78 @@ namespace WindowsFormsMap1
             catch { return null; }
         }
     }
+
+    /// <summary>
+    /// [Agent Add] 全局样式引擎 (蓝白现代风格)
+    /// </summary>
+    public static class ThemeEngine
+    {
+        public static readonly Color ColorPrimary = Color.FromArgb(37, 99, 235);     // 深蓝
+        public static readonly Color ColorSecondary = Color.FromArgb(239, 246, 255); // 浅蓝
+        public static readonly Color ColorNeutral = Color.FromArgb(248, 250, 252);   // 偏白灰
+        public static readonly Color ColorText = Color.FromArgb(30, 41, 59);        // 深灰蓝
+        public static readonly string FontDefault = "微软雅黑";
+
+        public static void ApplyTheme(Form form)
+        {
+            form.Font = new Font(FontDefault, 9F);
+            form.BackColor = Color.White;
+        }
+
+        public static void ApplyButtonTheme(Button btn, bool isPrimary = false)
+        {
+            btn.FlatStyle = FlatStyle.Flat;
+            btn.Font = new Font(FontDefault, 9F, isPrimary ? FontStyle.Bold : FontStyle.Regular);
+            btn.Height = 32;
+            btn.Cursor = Cursors.Hand;
+
+            if (isPrimary)
+            {
+                btn.BackColor = ColorPrimary;
+                btn.ForeColor = Color.White;
+                btn.FlatAppearance.BorderSize = 0;
+            }
+            else
+            {
+                btn.BackColor = Color.White;
+                btn.ForeColor = ColorText;
+                btn.FlatAppearance.BorderColor = Color.FromArgb(226, 232, 240);
+                btn.FlatAppearance.MouseOverBackColor = ColorSecondary;
+            }
+        }
+
+        public static void ApplyMenuStripTheme(MenuStrip ms)
+        {
+            ms.BackColor = Color.White;
+            ms.ForeColor = ColorText;
+            ms.Font = new Font(FontDefault, 9F);
+            ms.RenderMode = ToolStripRenderMode.Professional; // 改为专业模式以支持自定义 Renderer
+            ms.Padding = new Padding(6, 4, 6, 4);
+        }
+
+        public static void ApplyTOCTheme(Control toc)
+        {
+            // TOCControl 本身是 Com 接口，其背景色通常随系统或宿主容器
+            // 我们通过美化外层容器来提升视觉感
+            toc.BackColor = Color.White;
+            toc.ForeColor = ColorText;
+            if (toc.Parent != null)
+            {
+                toc.Parent.BackColor = Color.White;
+            }
+        }
+
+        public static void ApplyStatusStripTheme(StatusStrip ss)
+        {
+            ss.BackColor = ColorNeutral;
+            ss.ForeColor = Color.FromArgb(100, 116, 139);
+            ss.Font = new Font(FontDefault, 8.5F);
+        }
+
+        public static void ApplyTabControlTheme(TabControl tc)
+        {
+            // Windows Forms 原生 TabControl 较难深入美化，此处仅优化基础字体与背景
+            tc.Font = new Font(FontDefault, 9F);
+        }
+    }
 }

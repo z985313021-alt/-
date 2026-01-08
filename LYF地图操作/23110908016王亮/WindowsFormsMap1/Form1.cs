@@ -3,6 +3,7 @@ using ESRI.ArcGIS.Carto;
 using ESRI.ArcGIS.Controls;
 using ESRI.ArcGIS.Display;
 using System;
+using System.Drawing;
 using System.Windows.Forms;
 
 namespace WindowsFormsMap1
@@ -22,6 +23,7 @@ namespace WindowsFormsMap1
         // ================= 状态管理 =================
         public enum MapToolMode { None, Pan, MeasureDistance, MeasureArea, CreateFeature }
         private MapToolMode _currentToolMode = MapToolMode.None;
+        private FormICHDetails _activeDetailsForm = null; // [Agent Add] 记录当前打开的详情窗体
         private int _dashboardYear = 2025; // [Member B] Added: 缓存当前看板年份，用于事件驱动刷新
         private UIHelper _ui;
 
@@ -33,6 +35,19 @@ namespace WindowsFormsMap1
 
         private void Form1_Load(object sender, EventArgs e)
         {
+            // [Agent Add] 全局样式注入
+            ThemeEngine.ApplyTheme(this);
+            ThemeEngine.ApplyMenuStripTheme(menuStrip1);
+            ThemeEngine.ApplyStatusStripTheme(statusStrip1);
+            ThemeEngine.ApplyTabControlTheme(tabControl1);
+            ThemeEngine.ApplyTOCTheme(axTOCControl2);
+
+            // 美化分割线与容器
+            splitter1.BackColor = Color.FromArgb(226, 232, 240);
+            splitter2.BackColor = Color.FromArgb(226, 232, 240);
+            tabPage1.BackColor = Color.White;
+            tabPage2.BackColor = Color.White;
+
             // 1. 初始化核心 Helper (必须在 UI 逻辑之前)
             _measureHelper = new MeasureHelper(axMapControl2);
             _editorHelper = new EditorHelper(axMapControl2);

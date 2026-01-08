@@ -7,6 +7,7 @@ using ESRI.ArcGIS.Geometry;
 using ESRI.ArcGIS.SystemUI;
 using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.Windows.Forms;
 
 namespace WindowsFormsMap1
@@ -90,7 +91,7 @@ namespace WindowsFormsMap1
 
             // 2. 地图内容区
             Panel mapContainer = new Panel { Dock = DockStyle.Fill };
-            _panelMapToolbar = new Panel { Height = 40, Dock = DockStyle.Top, BackColor = System.Drawing.Color.WhiteSmoke };
+            _panelMapToolbar = new Panel { Height = 45, Dock = DockStyle.Top, BackColor = Color.White, Padding = new Padding(5) };
             AddMapNavigationButtons();
 
             axMapControlVisual.Parent = null;
@@ -157,22 +158,20 @@ namespace WindowsFormsMap1
                 axMapControlVisual.MousePointer = esriControlsMousePointer.esriPointerArrow;
             };
 
-            // 2. 识别
+            // 2. 识别 (自定义识别)
             var btnIdentify = CreateNavButton("识别");
             btnIdentify.Click += (s, e) =>
             {
-                ICommand cmd = new ControlsMapIdentifyToolClass();
-                cmd.OnCreate(axMapControlVisual.Object);
-                axMapControlVisual.CurrentTool = cmd as ITool;
+                // [Agent Modified] 改为自定义识别模式，不再使用原生对话框
+                axMapControlVisual.CurrentTool = null;
+                axMapControlVisual.MousePointer = esriControlsMousePointer.esriPointerIdentify;
             };
 
             // 2.1 [Agent Add] 联网搜索
             var btnWebSearch = CreateNavButton("联网搜索");
             btnWebSearch.Click += (s, e) =>
             {
-                // 清空当前工具，进入自定义搜索模式
                 axMapControlVisual.CurrentTool = null;
-                // 设置鼠标样式为“探询/搜索”状 (使用 Crosshair)
                 axMapControlVisual.MousePointer = esriControlsMousePointer.esriPointerCrosshair;
             };
 
@@ -242,14 +241,14 @@ namespace WindowsFormsMap1
 
         private Button CreateNavButton(string text)
         {
-            return new Button
+            Button btn = new Button
             {
                 Text = text,
-                Width = 60,
-                Height = 30,
-                FlatStyle = FlatStyle.System,
-                BackColor = System.Drawing.Color.White
+                Width = 75,
+                Height = 32
             };
+            ThemeEngine.ApplyButtonTheme(btn, false);
+            return btn;
         }
 
         /// <summary>
@@ -261,16 +260,14 @@ namespace WindowsFormsMap1
             btn.Text = text;
             btn.Size = new System.Drawing.Size(70, 70);
             btn.Location = new System.Drawing.Point(5, 20 + index * 80);
-            btn.FlatStyle = FlatStyle.Flat;
+            ThemeEngine.ApplyButtonTheme(btn, true); // 侧边栏主操作使用 Primary 样式
+            btn.BackColor = Color.White; // 稍微差异化，保持白色背景
+            btn.ForeColor = ThemeEngine.ColorText;
             btn.FlatAppearance.BorderSize = 1;
-            btn.FlatAppearance.BorderColor = System.Drawing.Color.LightSteelBlue;
-            btn.ForeColor = System.Drawing.Color.Black;
-            btn.BackColor = System.Drawing.Color.White;
-            btn.Cursor = Cursors.Hand;
-            btn.Font = new System.Drawing.Font("微软雅黑", 10F, System.Drawing.FontStyle.Bold);
+            btn.FlatAppearance.BorderColor = Color.FromArgb(226, 232, 240);
 
-            btn.MouseEnter += (s, e) => btn.BackColor = System.Drawing.Color.AliceBlue;
-            btn.MouseLeave += (s, e) => btn.BackColor = System.Drawing.Color.White;
+            btn.MouseEnter += (s, e) => { btn.BackColor = ThemeEngine.ColorSecondary; btn.ForeColor = ThemeEngine.ColorPrimary; };
+            btn.MouseLeave += (s, e) => { btn.BackColor = Color.White; btn.ForeColor = ThemeEngine.ColorText; };
 
             btn.Click += SidebarBtn_Click;
 
