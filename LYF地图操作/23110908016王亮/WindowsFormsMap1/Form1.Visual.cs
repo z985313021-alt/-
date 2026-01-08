@@ -150,33 +150,15 @@ namespace WindowsFormsMap1
         // [Member E] 新增：演示模式集成导航工具
         private void AddMapNavigationButtons()
         {
-            var btnFull = CreateNavButton("全图");
-            btnFull.Click += (s, e) => { axMapControlVisual.Extent = axMapControlVisual.FullExtent; axMapControlVisual.ActiveView.Refresh(); };
-
-            var btnPan = CreateNavButton("漫游");
-            btnPan.Click += (s, e) =>
+            // 1. 指针 (恢复默认状态)
+            var btnPointer = CreateNavButton("指针");
+            btnPointer.Click += (s, e) =>
             {
-                ICommand cmd = new ControlsMapPanToolClass();
-                cmd.OnCreate(axMapControlVisual.Object);
-                axMapControlVisual.CurrentTool = cmd as ITool;
+                axMapControlVisual.CurrentTool = null;
+                axMapControlVisual.MousePointer = esriControlsMousePointer.esriPointerArrow;
             };
 
-            var btnZoomIn = CreateNavButton("放大");
-            btnZoomIn.Click += (s, e) =>
-            {
-                ICommand cmd = new ControlsMapZoomInToolClass();
-                cmd.OnCreate(axMapControlVisual.Object);
-                axMapControlVisual.CurrentTool = cmd as ITool;
-            };
-
-            var btnZoomOut = CreateNavButton("缩小");
-            btnZoomOut.Click += (s, e) =>
-            {
-                ICommand cmd = new ControlsMapZoomOutToolClass();
-                cmd.OnCreate(axMapControlVisual.Object);
-                axMapControlVisual.CurrentTool = cmd as ITool;
-            };
-
+            // 2. 识别
             var btnIdentify = CreateNavButton("识别");
             btnIdentify.Click += (s, e) =>
             {
@@ -185,11 +167,59 @@ namespace WindowsFormsMap1
                 axMapControlVisual.CurrentTool = cmd as ITool;
             };
 
+            // 3. 漫游
+            var btnPan = CreateNavButton("漫游");
+            btnPan.Click += (s, e) =>
+            {
+                ICommand cmd = new ControlsMapPanToolClass();
+                cmd.OnCreate(axMapControlVisual.Object);
+                axMapControlVisual.CurrentTool = cmd as ITool;
+            };
+
+            // 4. 放大
+            var btnZoomIn = CreateNavButton("放大");
+            btnZoomIn.Click += (s, e) =>
+            {
+                ICommand cmd = new ControlsMapZoomInToolClass();
+                cmd.OnCreate(axMapControlVisual.Object);
+                axMapControlVisual.CurrentTool = cmd as ITool;
+            };
+
+            // 5. 缩小
+            var btnZoomOut = CreateNavButton("缩小");
+            btnZoomOut.Click += (s, e) =>
+            {
+                ICommand cmd = new ControlsMapZoomOutToolClass();
+                cmd.OnCreate(axMapControlVisual.Object);
+                axMapControlVisual.CurrentTool = cmd as ITool;
+            };
+
+            // 6. 全图
+            var btnFull = CreateNavButton("全图");
+            btnFull.Click += (s, e) => { axMapControlVisual.Extent = axMapControlVisual.FullExtent; axMapControlVisual.ActiveView.Refresh(); };
+
+            // 7. 清除 (清除高亮选择)
+            var btnClear = CreateNavButton("清除");
+            btnClear.Click += (s, e) =>
+            {
+                // 1. 清除地图选择集
+                axMapControlVisual.Map.ClearSelection();
+                
+                // 2. 清除可能的图形元素 (如画笔绘制的临时图形)
+                axMapControlVisual.ActiveView.GraphicsContainer.DeleteAllElements();
+                
+                // 3. 强制全图刷新 (以解决高亮残留问题)
+                axMapControlVisual.ActiveView.Refresh();
+            };
+
+            // 按顺序添加到工具栏
+            _panelMapToolbar.Controls.Add(btnPointer);
             _panelMapToolbar.Controls.Add(btnIdentify);
-            _panelMapToolbar.Controls.Add(btnZoomOut);
-            _panelMapToolbar.Controls.Add(btnZoomIn);
             _panelMapToolbar.Controls.Add(btnPan);
+            _panelMapToolbar.Controls.Add(btnZoomIn);
+            _panelMapToolbar.Controls.Add(btnZoomOut);
             _panelMapToolbar.Controls.Add(btnFull);
+            _panelMapToolbar.Controls.Add(btnClear);
 
             int left = 5;
             foreach (Control ctrl in _panelMapToolbar.Controls)
