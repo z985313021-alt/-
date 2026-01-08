@@ -19,38 +19,35 @@ namespace WindowsFormsMap1
         // [Member E] Modified: 增强索引切换逻辑，实现“专业/演示”模式的一键切换
         private void TabControl1_SelectedIndexChanged(object sender, EventArgs e)
         {
-            TabPage selectedTab = tabControl1.SelectedTab;
-            bool isVisualMode = selectedTab == tabPageVisual || tabControl1.SelectedIndex == 2;
+            // [修复] 统一判定逻辑：索引 2 为演示模式
+            bool isVisualMode = tabControl1.SelectedIndex == 2;
 
             // 调用双态切换引擎
             SetUIMode(isVisualMode);
 
-            if (selectedTab.Text.Contains("布局") || tabControl1.SelectedIndex == 1)
+            if (tabControl1.SelectedIndex == 1) // 布局视图
             {
                 _layoutHelper.SynchronizeMap();
             }
 
             if (isVisualMode)
             {
+                // [优化] 确保在初始化布局前完成同步
                 SyncToVisualMode();
                 if (!_isVisualLayoutInitialized) InitVisualLayout();
             }
-            else if (tabControl1.SelectedIndex == 0)
+            else if (tabControl1.SelectedIndex == 0) // 数据视图
             {
-                // [Member A] 进入数据视图时的鲁棒性增强
-                // 1. 强制设为全图显示（满足用户“适当大小”的要求）
-                if (axMapControl2.LayerCount > 0)
-                {
-                    axMapControl2.Extent = axMapControl2.FullExtent;
-                    axMapControl2.ActiveView.Refresh();
-                }
-
-                // 2. 解决 WinForms 容器刷新滞后导致的“重叠”或“刷新不全”问题
+                // 解决刷新延迟并自动全图
                 this.BeginInvoke(new Action(() =>
                 {
+                    if (this.axMapControl2.LayerCount > 0)
+                    {
+                        this.axMapControl2.Extent = this.axMapControl2.FullExtent;
+                    }
                     this.axMapControl2.Refresh();
-                    if (this.axTOCControl2 != null) this.axTOCControl2.Update();
-                    this.Refresh(); // 强制主窗体重绘以修正 Splitter 布局
+                    this.axTOCControl2?.Update();
+                    this.Refresh();
                 }));
             }
         }
@@ -60,25 +57,25 @@ namespace WindowsFormsMap1
         private Panel _panelTimeline; // [New] 时间轴容器
         private TrackBar _timeSlider; // [New] 时间滑块
         private Label _lblYear;       // [New] 年份显示
-
-        /// <summary>
-        /// [Member E] 新增：双态 UI 切换核心引擎
-        /// </summary>
-        /// <param name="isPresentation">是否进入演示模式</param>
+        
+        // [Member B] 共享状态
+        // [Member B] Added: 绑定地图事件监听器
+        // 注意：_dashboardYear 已在主分部类 Form1.cs 中定义
+        
         public void SetUIMode(bool isPresentation)
         {
-            // 1. 隐藏/显示 专业级 GIS 工具
+            // 1. 显隐专业工具
             this.menuStrip1.Visible = !isPresentation;
             this.statusStrip1.Visible = !isPresentation;
             this.axTOCControl2.Visible = !isPresentation;
             this.splitter1.Visible = !isPresentation;
             this.splitter2.Visible = !isPresentation;
 
-            // 2. 调整 TabControl 样式 (演示模式下微调界面)
+            // 2. 鹰眼同步：专业模式下由 Load/ExtentUpdated 驱动，演示模式下需手动唤醒
             if (isPresentation)
             {
-                // 沉浸式处理：隐藏 Tab 页签边框（通过调整外观，WinForms 限制较多，主要通过覆盖实现）
-                this.FormBorderStyle = FormBorderStyle.Sizable; // 保持可缩放但去工具感
+                // 演示模式下强制把鹰眼面板置顶
+                if (_panelEagleVisual != null) _panelEagleVisual.BringToFront();
             }
         }
 
@@ -86,62 +83,49 @@ namespace WindowsFormsMap1
         private SplitContainer _splitContainerVisual;
         private Panel _panelMapToolbar;
 
-        /// <summary>
-        /// [Member E] 重构：将 tabPageVisual 重新规划为“左侧边栏、右侧主展示区”
-        /// 调整为浅色主题以匹配主框架
-        /// </summary>
         public void InitVisualLayout()
         {
             if (_isVisualLayoutInitialized) return;
 
-            // 1. 创建右侧主内容区容器 (承载地图和图表)
-            _panelMainContent = new Panel();
-            _panelMainContent.Dock = DockStyle.Fill;
-            _panelMainContent.BackColor = System.Drawing.Color.AliceBlue; // 浅蓝背景
-
-            // 2. 创建左侧导航侧边栏
-            _panelSidebar = new Panel();
-            _panelSidebar.Width = 80; // 窄边导航
-            _panelSidebar.Dock = DockStyle.Left;
-            _panelSidebar.BackColor = System.Drawing.Color.LightSteelBlue; // 浅色导航
-            _panelSidebar.Padding = new Padding(5, 20, 5, 5);
-
-            // [Member E] 简化：仅保留全景导航
+            // 1. 结构化容器
+            _panelMainContent = new Panel { Dock = DockStyle.Fill, BackColor = System.Drawing.Color.AliceBlue };
+            _panelSidebar = new Panel { Width = 80, Dock = DockStyle.Left, BackColor = System.Drawing.Color.LightSteelBlue, Padding = new Padding(5, 20, 5, 5) };
             AddSidebarButton("全景", 0);
             AddSidebarButton("热力图", 1); // [New] 新增热力图入口
 
-            // 3. 重新架构 SplitContainer (改为右侧内部的上下结构)
-            _splitContainerVisual = new SplitContainer();
-            _splitContainerVisual.Dock = DockStyle.Fill;
-            _splitContainerVisual.Orientation = Orientation.Horizontal;
+            _splitContainerVisual = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Horizontal, BorderStyle = BorderStyle.FixedSingle };
             _splitContainerVisual.SplitterDistance = (int)(tabPageVisual.Height * 0.7);
-            _splitContainerVisual.BorderStyle = BorderStyle.FixedSingle;
 
-            // 4. 配置地图面板及导航工具栏
+            // 2. 地图内容区
             Panel mapContainer = new Panel { Dock = DockStyle.Fill };
             _panelMapToolbar = new Panel { Height = 40, Dock = DockStyle.Top, BackColor = System.Drawing.Color.WhiteSmoke };
-
-            AddMapNavigationButtons(); // 添加导航按钮
+            AddMapNavigationButtons();
 
             axMapControlVisual.Parent = null;
             axMapControlVisual.Dock = DockStyle.Fill;
-            mapContainer.Controls.Add(axMapControlVisual);
+
+            // [Fix] Add toolbar first to ensure it takes the Top dock space correctly, 
+            // then map fills the rest. Or explicitly use BringToFront.
             mapContainer.Controls.Add(_panelMapToolbar);
+            mapContainer.Controls.Add(axMapControlVisual);
+            _panelMapToolbar.BringToFront(); // Double insurance
 
             _splitContainerVisual.Panel1.Controls.Add(mapContainer);
 
-            // 5. 迁移图表看板
-            if (_dashboardForm == null || _dashboardForm.IsDisposed) _dashboardForm = new FormChart();
-            _dashboardForm.SetMapControl(this.axMapControlVisual);
-            _dashboardForm.SetMainForm(this);
+            // 3. 看板集成
+            if (_dashboardForm == null || _dashboardForm.IsDisposed)
+            {
+                _dashboardForm = new FormChart();
+                _dashboardForm.SetMapControl(axMapControlVisual);
+                _dashboardForm.SetMainForm(this);
+            }
             _dashboardForm.TopLevel = false;
             _dashboardForm.FormBorderStyle = FormBorderStyle.None;
             _dashboardForm.Dock = DockStyle.Fill;
-            _dashboardForm.BackColor = System.Drawing.Color.White;
             _dashboardForm.Visible = true;
             _splitContainerVisual.Panel2.Controls.Add(_dashboardForm);
 
-            // 6. 组装布局
+            // 4. 安全组装 (修复：Controls.Clear() 会删掉 EagleEye)
             _panelMainContent.Controls.Add(_splitContainerVisual);
             
             // [New] 初始化时间轴 (默认隐藏)
@@ -149,9 +133,28 @@ namespace WindowsFormsMap1
             _panelMainContent.Controls.Add(_panelTimeline);
             _panelTimeline.Visible = false;
 
-            tabPageVisual.Controls.Clear(); // 清理旧布局 (Header 等)
+            // [Member B] Added: 绑定地图事件监听器，实现全自动图表联动
+            axMapControlVisual.OnMapReplaced += (s, ev) =>
+            {
+                if (_dashboardForm != null && !_dashboardForm.IsDisposed)
+                    _dashboardForm.UpdateChartData(_dashboardYear); // 定义一个字段记录当前年份
+            };
+
+            // 备份鹰眼面板
+            Control eagleBackup = null;
+            if (_panelEagleVisual != null && tabPageVisual.Controls.Contains(_panelEagleVisual))
+                eagleBackup = _panelEagleVisual;
+
+            tabPageVisual.Controls.Clear();
             tabPageVisual.Controls.Add(_panelMainContent);
             tabPageVisual.Controls.Add(_panelSidebar);
+
+            // 还原鹰眼并置顶
+            if (eagleBackup != null)
+            {
+                tabPageVisual.Controls.Add(eagleBackup);
+                eagleBackup.BringToFront();
+            }
 
             _isVisualLayoutInitialized = true;
         }
@@ -174,6 +177,16 @@ namespace WindowsFormsMap1
                 ICommand cmd = new ControlsMapIdentifyToolClass();
                 cmd.OnCreate(axMapControlVisual.Object);
                 axMapControlVisual.CurrentTool = cmd as ITool;
+            };
+
+            // 2.1 [Agent Add] 联网搜索
+            var btnWebSearch = CreateNavButton("联网搜索");
+            btnWebSearch.Click += (s, e) =>
+            {
+                // 清空当前工具，进入自定义搜索模式
+                axMapControlVisual.CurrentTool = null;
+                // 设置鼠标样式为“探询/搜索”状 (使用 Crosshair)
+                axMapControlVisual.MousePointer = esriControlsMousePointer.esriPointerCrosshair;
             };
 
             // 3. 漫游
@@ -213,10 +226,10 @@ namespace WindowsFormsMap1
             {
                 // 1. 清除地图选择集
                 axMapControlVisual.Map.ClearSelection();
-                
+
                 // 2. 清除可能的图形元素 (如画笔绘制的临时图形)
                 axMapControlVisual.ActiveView.GraphicsContainer.DeleteAllElements();
-                
+
                 // 3. 强制全图刷新 (以解决高亮残留问题)
                 axMapControlVisual.ActiveView.Refresh();
             };
@@ -224,6 +237,7 @@ namespace WindowsFormsMap1
             // 按顺序添加到工具栏
             _panelMapToolbar.Controls.Add(btnPointer);
             _panelMapToolbar.Controls.Add(btnIdentify);
+            _panelMapToolbar.Controls.Add(btnWebSearch); // [Fix] Add missing button
             _panelMapToolbar.Controls.Add(btnPan);
             _panelMapToolbar.Controls.Add(btnZoomIn);
             _panelMapToolbar.Controls.Add(btnZoomOut);
@@ -341,14 +355,14 @@ namespace WindowsFormsMap1
         }
 
         // [Member E] Modified: 修复同步逻辑，确保地图图层正确复制且不发生冲突
-        private void SyncToVisualMode()
+        private void SyncToVisualMode(bool force = false)
         {
             if (axMapControlVisual == null || axMapControl2 == null) return;
             try
             {
                 // [Member E] 同步专业版底图到演示版
-                // 仅在首次加载或用户明确同步时执行
-                if (axMapControlVisual.LayerCount == 0 && axMapControl2.LayerCount > 0)
+                // 仅在首次加载或用户明确同步时执行，或者强制同步时执行
+                if (force || (axMapControlVisual.LayerCount == 0 && axMapControl2.LayerCount > 0))
                 {
                     // 深度克隆地图对象（避免引用冲突引发的 COM 异常）
                     try
@@ -515,13 +529,11 @@ namespace WindowsFormsMap1
         private void ResetRenderer()
         {
              // 恢复普通点展示 (通过 FilterMapByYear 解除过滤并重置 Renderer 也可以，或者简单全图刷新)
-             // 这里简单地清除 DefinitionExpression，真实复原需要保存原有 Renderer，简化处理则重载图层
-             // 简单处理: 显示所有数据
+             // 先重置数据过滤，显示全部数据
              FilterMapByYear(2099); 
-             // 还需要恢复符号? 暂时假设 FilterMapByYear 只过滤数据
-             // 如果 ApplyHeatmapRenderer 修改了符号，这里应该恢复。
-             // 由于 ArcEngine 恢复符号较繁琐，我们可以重新调用 SyncToVisualMode 来“重置”图层。
-             SyncToVisualMode(); 
+             
+             // 强制重新同步图层，覆盖热力图的临时符号
+             SyncToVisualMode(true); 
         }
 
         private void ApplyHeatmapRenderer()
@@ -888,53 +900,14 @@ namespace WindowsFormsMap1
         {
             try
             {
-                // 1. 查找非遗图层
-                IFeatureLayer heritageLayer = null;
-                for (int i = 0; i < axMapControlVisual.LayerCount; i++)
-                {
-                    ILayer layer = axMapControlVisual.get_Layer(i);
-                    if (layer is IFeatureLayer)
-                    {
-                        string ln = layer.Name;
-                        if (ln.Contains("非遗") || ln.Contains("名录") || ln.Contains("项目") || ln.Contains("ICH"))
-                        {
-                            heritageLayer = layer as IFeatureLayer;
-                            break;
-                        }
-                    }
-                }
+                // 1. 同步共享状态 (Member B)
+                _dashboardYear = year;
 
-                if (heritageLayer == null) return;
-
-                // 2. 检查是否有"公布时间"字段
-                IFeatureClass fc = heritageLayer.FeatureClass;
-                int timeFieldIndex = fc.FindField("公布时间");
-                if (timeFieldIndex == -1) return;
-
-                // 3. 构建双模式SQL过滤条件（复用Form1.Data.cs的逻辑）
-                int maxBatch = 1;
-                if (year >= 2006) maxBatch = 1;
-                if (year >= 2008) maxBatch = 2;
-                if (year >= 2011) maxBatch = 3;
-                if (year >= 2014) maxBatch = 4;
-                if (year >= 2021) maxBatch = 5;
-
-                string sqlFilter = $"(公布时间 >= 1900 AND 公布时间 <= {year}) OR (公布时间 >= 1 AND 公布时间 <= {maxBatch})";
-
-                // 4. 应用Definition Expression
-                IFeatureLayerDefinition layerDef = heritageLayer as IFeatureLayerDefinition;
-                if (layerDef != null)
-                {
-                    layerDef.DefinitionExpression = sqlFilter;
-                }
-
-                // 5. 刷新地图视图
-                axMapControlVisual.ActiveView.PartialRefresh(esriViewDrawPhase.esriViewGeography, null, null);
+                // 2. 依次过滤专业版和演示版地图 (Member D)
+                ApplyYearFilterToControl(axMapControl2, year);
+                ApplyYearFilterToControl(axMapControlVisual, year);
             }
-            catch (Exception)
-            {
-                // 静默处理，不影响主流程
-            }
+            catch (Exception) { }
         }
     }
 }
