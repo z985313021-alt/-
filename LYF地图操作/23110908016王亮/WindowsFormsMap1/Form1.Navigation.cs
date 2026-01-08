@@ -52,6 +52,27 @@ namespace WindowsFormsMap1
                 case MapToolMode.MeasureArea:
                     _measureHelper.OnMouseDown(e.x, e.y);
                     break;
+                // [Member C] 智能工具箱交互
+                case MapToolMode.BufferPoint:
+                    ExecutePointBuffer(e.x, e.y);
+                    break;
+                case MapToolMode.PickRoutePoint:
+                    IPoint pt = axMapControl2.ActiveView.ScreenDisplay.DisplayTransformation.ToMapPoint(e.x, e.y);
+                    // [修复] 显式指定坐标系为当前地图坐标系，防止投影计算偏差
+                    pt.SpatialReference = axMapControl2.SpatialReference;
+                    if (_routeForm != null && !_routeForm.IsDisposed)
+                    {
+                        _routeForm.AddPoint(pt); // 回传给弹窗
+                    }
+                    break;
+                case MapToolMode.QueryBox:
+                    IEnvelope env = axMapControl2.TrackRectangle();
+                    PerformSpatialQuery(env);
+                    break;
+                case MapToolMode.QueryPolygon:
+                    IGeometry poly = axMapControl2.TrackPolygon();
+                    PerformSpatialQuery(poly);
+                    break;
                 default:
                     // [Member B] 要素识别 (Identify) 逻辑
                     // 仅在默认工具模式（箭头）下触发

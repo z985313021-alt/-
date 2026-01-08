@@ -5,6 +5,7 @@ using ESRI.ArcGIS.Display;
 using System;
 using System.Drawing;
 using System.Windows.Forms;
+using ESRI.ArcGIS.Geometry;
 
 namespace WindowsFormsMap1
 {
@@ -15,13 +16,52 @@ namespace WindowsFormsMap1
     /// </summary>
     public partial class Form1 : Form
     {
-        // ================= 核心助手 (Helper) =================
+        private FormRoute _routeForm;
+
+        // ... existing fields ...
+
+        // [Member C] 
+        public void DrawTempPoint(IPoint pt, int index)
+        {
+            if (pt == null) return;
+            IMarkerElement markerEle = new MarkerElementClass();
+            (markerEle as IElement).Geometry = pt;
+            markerEle.Symbol = new SimpleMarkerSymbolClass { Color = new RgbColorClass { Red = 0, Green = 0, Blue = 255 }, Size = 8, Style = esriSimpleMarkerStyle.esriSMSCircle };
+            axMapControl2.ActiveView.GraphicsContainer.AddElement(markerEle as IElement, 0);
+            
+            // 添加文字标签 (使用 TextElement)
+            ITextElement textEle = new TextElementClass { Text = index.ToString() };
+            (textEle as IElement).Geometry = pt;
+            textEle.Symbol = new TextSymbolClass { Size = 12, Color = new RgbColorClass { Red = 0, Green = 0, Blue = 0 } };
+            axMapControl2.ActiveView.GraphicsContainer.AddElement(textEle as IElement, 0);
+
+            axMapControl2.ActiveView.PartialRefresh(esriViewDrawPhase.esriViewGraphics, null, null);
+        }
+
+        public void RefreshMap()
+        {
+            if (axMapControl2 != null)
+            {
+               axMapControl2.ActiveView.GraphicsContainer.DeleteAllElements();
+               axMapControl2.ActiveView.Refresh();
+            }
+        }
         private EditorHelper _editorHelper;
         private MeasureHelper _measureHelper;
         private LayoutHelper _layoutHelper;
+        // [Member C] 智能工具箱核心
+        public AnalysisHelper _analysisHelper; // 公开以便其他分部类访问
 
         // ================= 状态管理 =================
-        public enum MapToolMode { None, Pan, MeasureDistance, MeasureArea, CreateFeature }
+        // ================= 状态管理 =================
+        public enum MapToolMode 
+        { 
+            None, Pan, MeasureDistance, MeasureArea, CreateFeature,
+            // [Member C] 新增模式
+            BufferPoint, RouteStart, RouteEnd, QueryBox, QueryPolygon,
+            // [Member C] Multi-point route interaction
+            PickRoutePoint
+        }
         private MapToolMode _currentToolMode = MapToolMode.None;
         private FormICHDetails _activeDetailsForm = null; // [Agent Add] 记录当前打开的详情窗体
         private int _dashboardYear = 2025; // [Member B] Added: 缓存当前看板年份，用于事件驱动刷新
@@ -54,11 +94,15 @@ namespace WindowsFormsMap1
             _editorHelper = new EditorHelper(axMapControl2);
             _layoutHelper = new LayoutHelper(this.axPageLayoutControl1, this.axMapControl2);
             _ui = new UIHelper(this, axMapControl2, menuStrip1);
+            _analysisHelper = new AnalysisHelper(); // [Member C] 初始化
 
             // 2. 基础事件绑定
             axTOCControl2.OnMouseDown += AxTOCControl2_OnMouseDown;
             axTOCControl2.SetBuddyControl(axMapControl2);
             this.tabControl1.SelectedIndexChanged += TabControl1_SelectedIndexChanged;
+
+            // [Member C] 初始化智能工具菜单 (优先加载)
+            this.InitSmartTools();
 
             // 3. 使用异步调用确保 Handle 创建后再执行复杂 UI 同步
             this.BeginInvoke(new Action(() =>
