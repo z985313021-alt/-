@@ -95,8 +95,13 @@ namespace WindowsFormsMap1
 
             axMapControlVisual.Parent = null;
             axMapControlVisual.Dock = DockStyle.Fill;
-            mapContainer.Controls.Add(axMapControlVisual);
+
+            // [Fix] Add toolbar first to ensure it takes the Top dock space correctly, 
+            // then map fills the rest. Or explicitly use BringToFront.
             mapContainer.Controls.Add(_panelMapToolbar);
+            mapContainer.Controls.Add(axMapControlVisual);
+            _panelMapToolbar.BringToFront(); // Double insurance
+
             _splitContainerVisual.Panel1.Controls.Add(mapContainer);
 
             // 3. 看板集成
