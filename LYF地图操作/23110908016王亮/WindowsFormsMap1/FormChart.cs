@@ -25,12 +25,51 @@ namespace WindowsFormsMap1
 
         private void ApplyLightTheme()
         {
-            this.BackColor = System.Drawing.Color.AliceBlue;
+            ThemeEngine.ApplyTheme(this);
+            this.BackColor = Color.White;
+
             if (chart1 != null)
             {
-                chart1.BackColor = System.Drawing.Color.AliceBlue;
-                foreach (var area in chart1.ChartAreas) area.BackColor = System.Drawing.Color.White;
-                foreach (var title in chart1.Titles) title.ForeColor = System.Drawing.Color.DarkSlateBlue;
+                chart1.BackColor = Color.White;
+                foreach (var area in chart1.ChartAreas)
+                {
+                    area.BackColor = Color.FromArgb(252, 254, 255);
+                    area.AxisX.LabelStyle.ForeColor = ThemeEngine.ColorText;
+                    area.AxisY.LabelStyle.ForeColor = ThemeEngine.ColorText;
+                    area.AxisX.LineColor = Color.FromArgb(226, 232, 240);
+                    area.AxisY.LineColor = Color.FromArgb(226, 232, 240);
+                }
+                foreach (var title in chart1.Titles)
+                {
+                    title.ForeColor = ThemeEngine.ColorPrimary;
+                    title.Font = new Font(ThemeEngine.FontDefault, 10F, FontStyle.Bold);
+                }
+            }
+
+            if (chart2 != null)
+            {
+                chart2.BackColor = Color.White;
+                foreach (var title in chart2.Titles)
+                {
+                    title.ForeColor = ThemeEngine.ColorPrimary;
+                    title.Font = new Font(ThemeEngine.FontDefault, 10F, FontStyle.Bold);
+                }
+            }
+
+            // [Agent Add] 样式化控件
+            if (cmbChartType != null)
+            {
+                cmbChartType.FlatStyle = FlatStyle.Flat;
+                cmbChartType.Font = new Font(ThemeEngine.FontDefault, 9F);
+            }
+            if (btnExport != null)
+            {
+                ThemeEngine.ApplyButtonTheme(btnExport, false);
+            }
+            if (lblTime != null)
+            {
+                lblTime.ForeColor = ThemeEngine.ColorPrimary;
+                lblTime.Font = new Font(ThemeEngine.FontDefault, 9F, FontStyle.Bold);
             }
         }
 
@@ -314,7 +353,7 @@ namespace WindowsFormsMap1
             {
                 // [优化] 优先取 AxisLabel，若为空则取 XValue (针对不同 AddXY 重载)
                 string city = !string.IsNullOrEmpty(point.AxisLabel) ? point.AxisLabel : point.XValue.ToString();
-                
+
                 // 再次清洗城市名，确保匹配成功
                 int count = _mainForm.GetCountByCity(city, year);
                 point.YValues[0] = count;

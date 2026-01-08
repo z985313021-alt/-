@@ -2,15 +2,8 @@ namespace WindowsFormsMap1
 {
     partial class FormICHDetails
     {
-        /// <summary>
-        /// 必需的设计器变量。
-        /// </summary>
         private System.ComponentModel.IContainer components = null;
 
-        /// <summary>
-        /// 清理所有正在使用的资源。
-        /// </summary>
-        /// <param name="disposing">如果应释放托管资源，为 true；否则为 false。</param>
         protected override void Dispose(bool disposing)
         {
             if (disposing && (components != null))
@@ -22,10 +15,6 @@ namespace WindowsFormsMap1
 
         #region Windows Form Designer generated code
 
-        /// <summary>
-        /// 设计器支持所需的方法 - 不要修改
-        /// 使用代码编辑器修改此方法的内容。
-        /// </summary>
         private void InitializeComponent()
         {
             this.dataGridView1 = new System.Windows.Forms.DataGridView();
@@ -52,18 +41,17 @@ namespace WindowsFormsMap1
             // 
             // btnClose
             // 
-            this.btnClose.Location = new System.Drawing.Point(180, 415);
+            this.btnClose.Location = new System.Drawing.Point(240, 415);
             this.btnClose.Name = "btnClose";
             this.btnClose.Size = new System.Drawing.Size(75, 30);
             this.btnClose.TabIndex = 1;
             this.btnClose.Text = "关闭";
             this.btnClose.UseVisualStyleBackColor = true;
-            this.btnClose.UseVisualStyleBackColor = true;
             this.btnClose.Click += new System.EventHandler(this.BtnClose_Click);
             // 
             // btnSearch
             // 
-            this.btnSearch.Location = new System.Drawing.Point(80, 415);
+            this.btnSearch.Location = new System.Drawing.Point(120, 415);
             this.btnSearch.Name = "btnSearch";
             this.btnSearch.Size = new System.Drawing.Size(90, 30);
             this.btnSearch.TabIndex = 2;

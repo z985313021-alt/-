@@ -82,20 +82,27 @@ namespace WindowsFormsMap1
 
                 if (heritageLayer != null)
                 {
-                    IFeatureClass fc = heritageLayer.FeatureClass;
-                    int timeFieldIndex = fc.FindField("公布时间");
-                    int batchFieldIndex = fc.FindField("公布批次");
+                    IFields fields = heritageLayer.FeatureClass.Fields;
+                    string timeField = "";
+                    string batchField = "";
 
-                    if (timeFieldIndex != -1 || batchFieldIndex != -1)
+                    // [Agent Modified] 动态查找字段，提升兼容性
+                    for (int j = 0; j < fields.FieldCount; j++)
+                    {
+                        string fn = fields.get_Field(j).Name;
+                        if (fn.Contains("公布时间") || fn.ToUpper().Contains("YEAR") || fn.ToUpper().Contains("TIME")) timeField = fn;
+                        if (fn.Contains("公布批次") || fn.ToUpper().Contains("BATCH") || fn.ToUpper().Contains("PC")) batchField = fn;
+                    }
+
+                    if (!string.IsNullOrEmpty(timeField) || !string.IsNullOrEmpty(batchField))
                     {
                         List<string> conditions = new List<string>();
-
-                        if (timeFieldIndex != -1)
+                        if (!string.IsNullOrEmpty(timeField))
                         {
-                            conditions.Add($"(公布时间 >= 1900 AND 公布时间 <= {year})");
+                            conditions.Add($"({timeField} >= 1900 AND {timeField} <= {year})");
                         }
 
-                        if (batchFieldIndex != -1)
+                        if (!string.IsNullOrEmpty(batchField))
                         {
                             int maxBatch = 0;
                             if (year >= 2006) maxBatch = 1;
@@ -103,7 +110,7 @@ namespace WindowsFormsMap1
                             if (year >= 2011) maxBatch = 3;
                             if (year >= 2014) maxBatch = 4;
                             if (year >= 2021) maxBatch = 5;
-                            conditions.Add($"(公布批次 >= 1 AND 公布批次 <= {maxBatch})");
+                            conditions.Add($"({batchField} >= 1 AND {batchField} <= {maxBatch} AND {batchField} < 20)");
                         }
 
                         string sqlFilter = string.Join(" OR ", conditions);

@@ -15,15 +15,28 @@ namespace WindowsFormsMap1
 
         // [Member B] 新增：看板模块初始化逻辑
         private FormChart _dashboardForm;
+        // [Member B/Agent] 统一看板模块初始化逻辑 (支持嵌入式与弹窗式切换)
         public void InitDashboardModule()
         {
             if (_dashboardForm == null || _dashboardForm.IsDisposed)
             {
                 _dashboardForm = new FormChart();
-                _dashboardForm.SetMapControl(this.axMapControl2); // 传递主地图控件
-                _dashboardForm.Owner = this; // 设置所有者以保持同步
+                _dashboardForm.SetMainForm(this);
             }
-            _dashboardForm.Show();
+
+            // 如果已经嵌入在演示面板中，则直接跳转到演示选项卡
+            if (!_dashboardForm.TopLevel)
+            {
+                tabControl1.SelectedIndex = 2;
+                _dashboardForm.SetMapControl(this.axMapControlVisual);
+            }
+            else
+            {
+                _dashboardForm.SetMapControl(this.axMapControl2);
+                _dashboardForm.Owner = this;
+                _dashboardForm.Show();
+                _dashboardForm.BringToFront();
+            }
         }
 
         public void ItemStartEdit_Click(object sender, EventArgs e)

@@ -4,7 +4,9 @@ using ESRI.ArcGIS.Controls;
 using ESRI.ArcGIS.Display;
 using ESRI.ArcGIS.Geodatabase;
 using ESRI.ArcGIS.Geometry;
+using ESRI.ArcGIS.esriSystem;
 using System;
+using System.Collections.Generic;
 using System.Windows.Forms;
 
 namespace WindowsFormsMap1
@@ -90,48 +92,118 @@ namespace WindowsFormsMap1
                 IEnvelope pEnv = new EnvelopeClass();
                 IPoint pPoint = targetMapControl.ActiveView.ScreenDisplay.DisplayTransformation.ToMapPoint(x, y);
 
-                // 转换像素容差到地图单位。
-                // 5 像素的点击容差
-                double dist = targetMapControl.ActiveView.ScreenDisplay.DisplayTransformation.FromPoints(5);
+                // [Optimization] 增加容差到 20 像素，方便点中细小图标
+                double dist = targetMapControl.ActiveView.ScreenDisplay.DisplayTransformation.FromPoints(20);
                 pEnv.PutCoords(pPoint.X - dist, pPoint.Y - dist, pPoint.X + dist, pPoint.Y + dist);
 
-                // 2. 遍历所有图层寻找匹配项
+                // [Agent Modified] 判断是否处于自定义识别或联网搜索模式 (增加 Identify 指针支持)
+                if (targetMapControl.CurrentTool == null &&
+                    (targetMapControl.MousePointer == esriControlsMousePointer.esriPointerCrosshair ||
+                     targetMapControl.MousePointer == esriControlsMousePointer.esriPointerIdentify))
+                {
+                    DoWebSearch(pEnv, targetMapControl);
+                    return;
+                }
+
+                // 2. 遍历所有图层寻找匹配项 (原来的简单逻辑用于漫游等情况的备用，虽然设了null tool其实很少走到这)
+                // ... (保留原有的简单逻辑作为 fallback 或者不做任何事) ...
+                // 实际上如果只是漫游，根本不会进到这个事件处理里（漫游工具有自己的逻辑）。
+                // 只有当 CurrentTool 为 null 时才会进到这里。
+
+                // 为了兼容之前逻辑，这里也可以保留一个简单的识别，但既然有了独立按钮，
+                // 我们可以让默认点击不做任何事，或者仅通过 DoWebSearch 触发。
+                // 鉴于用户要求“原有识别按钮”是原生的，那个按钮走的是 ArcGIS 自带逻辑，不走这里。
+                // 这里只处理我们自定义的工具。
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("交互错误: " + ex.Message);
+            }
+        }
+
+        // [Agent Modified] 独立的联网搜索逻辑，支持跨坐标系、穿透 Group Layer
+        private void DoWebSearch(IEnvelope pEnv, ESRI.ArcGIS.Controls.AxMapControl targetMapControl)
+        {
+            try
+            {
+                IMap targetMap = targetMapControl.Map;
+                // 1. 确保搜索框具有地图的空间参考
+                pEnv.SpatialReference = targetMap.SpatialReference;
+
                 IFeature pFoundFeature = null;
 
-                // 从顶部图层开始向下遍历
-                for (int i = 0; i < targetMapControl.LayerCount; i++)
+                // 2. 递归遍历所有图层
+                IEnumLayer pEnumLayer = targetMap.get_Layers(null, true);
+                pEnumLayer.Reset();
+                ILayer pLayer = pEnumLayer.Next();
+
+                while (pLayer != null)
                 {
-                    ILayer l = targetMapControl.get_Layer(i);
-                    if (l is IFeatureLayer fl && fl.Visible)
+                    if (pLayer.Visible && pLayer is IFeatureLayer fl)
                     {
-                        // 目前仅针对点图层进行识别（非遗点位）
-                        if (fl.FeatureClass.ShapeType == esriGeometryType.esriGeometryPoint)
+                        // 仅关注点图层
+                        if (fl.FeatureClass != null && fl.FeatureClass.ShapeType == esriGeometryType.esriGeometryPoint)
                         {
-                            ISpatialFilter pSpatialFilter = new SpatialFilterClass();
-                            pSpatialFilter.Geometry = pEnv;
-                            pSpatialFilter.SpatialRel = esriSpatialRelEnum.esriSpatialRelIntersects;
+                            try
+                            {
+                                // 获取图层的空间参考
+                                ISpatialReference layerSR = (fl as IGeoDataset)?.SpatialReference;
 
-                            IFeatureCursor pCursor = fl.Search(pSpatialFilter, false);
-                            pFoundFeature = pCursor.NextFeature();
+                                // 克隆搜索框，以免修改原始对象影响后续图层
+                                IClone envClone = pEnv as IClone;
+                                IEnvelope queryEnv = envClone.Clone() as IEnvelope;
 
-                            System.Runtime.InteropServices.Marshal.ReleaseComObject(pCursor);
+                                // [关键修复] 如果图层坐标系与地图不同，必须进行投影变换！
+                                if (layerSR != null && pEnv.SpatialReference != null)
+                                {
+                                    queryEnv.Project(layerSR);
+                                }
 
-                            // 如果找到要素，则停止寻找
-                            if (pFoundFeature != null) break;
+                                ISpatialFilter pSpatialFilter = new SpatialFilterClass();
+                                pSpatialFilter.Geometry = queryEnv;
+                                pSpatialFilter.SpatialRel = esriSpatialRelEnum.esriSpatialRelIntersects;
+                                pSpatialFilter.GeometryField = fl.FeatureClass.ShapeFieldName;
+
+                                IFeatureCursor pCursor = fl.Search(pSpatialFilter, false);
+                                pFoundFeature = pCursor.NextFeature();
+                                System.Runtime.InteropServices.Marshal.ReleaseComObject(pCursor);
+
+                                if (pFoundFeature != null) break;
+                            }
+                            catch { }
                         }
                     }
+                    pLayer = pEnumLayer.Next();
                 }
 
                 if (pFoundFeature != null)
                 {
-                    // 4. 显示非遗详情窗体
-                    FormICHDetails form = new FormICHDetails(pFoundFeature);
-                    form.ShowDialog();
+                    // [Agent Modified] 保持窗口单例显示，并自动定位到右侧
+                    if (_activeDetailsForm != null && !_activeDetailsForm.IsDisposed)
+                    {
+                        _activeDetailsForm.Close();
+                    }
+
+                    _activeDetailsForm = new FormICHDetails(pFoundFeature);
+
+                    // 获取鹰眼面板引用 (如果是演示模式则用演示面板)
+                    Panel eaglePanel = (tabControl1.SelectedIndex == 2) ? _panelEagleVisual : _panelEaglePro;
+
+                    if (eaglePanel != null)
+                    {
+                        _activeDetailsForm.AlignToSidebar(this, eaglePanel);
+                    }
+
+                    _activeDetailsForm.Show();
+                }
+                else
+                {
+                    MessageBox.Show("未找到非遗项目。\n建议：\n1. 请确保点击的是绿色的小点图标。\n2. 尝试放大地图后再点击。", "搜索提示");
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine("要素识别错误: " + ex.Message);
+                MessageBox.Show("搜索出错: " + ex.Message);
             }
         }
 
