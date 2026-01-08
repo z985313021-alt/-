@@ -171,23 +171,27 @@ namespace WindowsFormsMap1
         /// </summary>
         public void SyncEagleEyeLayers()
         {
-            if (axMapControl2 == null || axMapControl2.LayerCount == 0) return;
-
             // 使用 BeginInvoke 确保在 COM 控件完全准备好加载图层
-            this.BeginInvoke(new Action(() =>
+            if (this.IsHandleCreated)
             {
-                try
+                this.BeginInvoke(new Action(() =>
                 {
-                    CopyBaseLayers(axMapControl2, _eagleEyePro);
+                    try
+                    {
+                        // 1. 同步专业版鹰眼
+                        if (axMapControl2 != null && axMapControl2.LayerCount > 0)
+                            CopyBaseLayers(axMapControl2, _eagleEyePro);
 
-                    // 演示视图可能有自己的底图，如果演示视图已有图层，从演示视图同步更准确
-                    if (axMapControlVisual != null && axMapControlVisual.LayerCount > 0)
-                        CopyBaseLayers(axMapControlVisual, _eagleEyeVisual);
-                    else
-                        CopyBaseLayers(axMapControl2, _eagleEyeVisual);
-                }
-                catch { }
-            }));
+                        // 2. 同步演示版鹰眼
+                        // 优先从演示地图控件同步，如果没图层则从专业版同步
+                        if (axMapControlVisual != null && axMapControlVisual.LayerCount > 0)
+                            CopyBaseLayers(axMapControlVisual, _eagleEyeVisual);
+                        else if (axMapControl2 != null && axMapControl2.LayerCount > 0)
+                            CopyBaseLayers(axMapControl2, _eagleEyeVisual);
+                    }
+                    catch { }
+                }));
+            }
         }
 
         private void CopyBaseLayers(AxMapControl source, AxMapControl target)

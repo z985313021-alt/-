@@ -22,7 +22,9 @@ namespace WindowsFormsMap1
         // ================= 状态管理 =================
         public enum MapToolMode { None, Pan, MeasureDistance, MeasureArea, CreateFeature }
         private MapToolMode _currentToolMode = MapToolMode.None;
+        private int _dashboardYear = 2025; // [Member B] Added: 缓存当前看板年份，用于事件驱动刷新
         private UIHelper _ui;
+
 
         public Form1()
         {
@@ -31,58 +33,83 @@ namespace WindowsFormsMap1
 
         private void Form1_Load(object sender, EventArgs e)
         {
-            // 1. 初始化 Helper
+            // 1. 初始化核心 Helper (必须在 UI 逻辑之前)
             _measureHelper = new MeasureHelper(axMapControl2);
             _editorHelper = new EditorHelper(axMapControl2);
             _layoutHelper = new LayoutHelper(this.axPageLayoutControl1, this.axMapControl2);
-
-            // 2. 初始化助手
             _ui = new UIHelper(this, axMapControl2, menuStrip1);
-            // 不再手动生成运行时 UI，回归设计器
 
-            // [Member B 集成]
-            // InitDashboardModule(); // 用户要求手动触发或静默加载
-
-            // 数据看板动态菜单 (Member B) - 已移除：已嵌入“可视化演示”选项卡中
-            // ToolStripMenuItem itemDashboard = new ToolStripMenuItem("数据看板(Dashboard)");
-            // itemDashboard.Click += (s, ev) => InitDashboardModule();
-            // menuStrip1.Items.Add(itemDashboard);
-
-
-            // 3. 基础事件绑定
+            // 2. 基础事件绑定
             axTOCControl2.OnMouseDown += AxTOCControl2_OnMouseDown;
             axTOCControl2.SetBuddyControl(axMapControl2);
             this.tabControl1.SelectedIndexChanged += TabControl1_SelectedIndexChanged;
 
-            // 4. 加载默认演示数据
-            LoadDefaultMxd();
+            // 3. 使用异步调用确保 Handle 创建后再执行复杂 UI 同步
+            this.BeginInvoke(new Action(() =>
+            {
+                // 加载默认演示数据
+                LoadDefaultMxd();
 
-            // [Member E] 集成：初始化鹰眼图
-            this.InitEagleEye();
+                // [Member E] 集成：初始化鹰眼图 (此时 TabPage 等容器 Handle 已就绪)
+                this.InitEagleEye();
 
-            // [Member A] 集成：启动默认进入“可视化演示”模式
-            this.tabControl1.SelectedIndex = 2;
+                // 强制进入演示模式逻辑
+                if (tabControl1.SelectedIndex != 2)
+                    tabControl1.SelectedIndex = 2;
+                else
+                    TabControl1_SelectedIndexChanged(null, null); // 即使索引已经是2也强制触发
+            }));
         }
 
         private void LoadDefaultMxd()
         {
-            string mxdPath = System.IO.Path.Combine(Application.StartupPath, @"..\..\..\初步\非遗.mxd");
-            if (!System.IO.File.Exists(mxdPath)) mxdPath = @"c:\Users\Administrator\Desktop\团队项目TEAMB\LYF----\LYF地图操作\初步\非遗.mxd";
+            // [Member D] Modified: 优化路径探测，防止组员电脑路径不一导致加载失败
+            string fileName = "非遗.mxd";
+            string mxdPath = FindMxdPath(Application.StartupPath, fileName);
 
-            if (System.IO.File.Exists(mxdPath))
+            if (!string.IsNullOrEmpty(mxdPath) && System.IO.File.Exists(mxdPath))
             {
                 axMapControl2.LoadMxFile(mxdPath);
-                axMapControl2.Extent = axMapControl2.FullExtent; // 默认全图显示
+                axMapControl2.Extent = axMapControl2.FullExtent;
                 axMapControl2.ActiveView.Refresh();
 
-                // [Member E] 同步鹰眼底图
+                // 同步鹰眼底图
                 this.SyncEagleEyeLayers();
-
-                // [重要] 可视化演示页在 Designer 中的索引是 2
-                // 强制触发一次 IndexChanged 以执行 UI 显隐逻辑
-                if (tabControl1.SelectedIndex == 2) TabControl1_SelectedIndexChanged(null, null);
-                else tabControl1.SelectedIndex = 2;
             }
+            else
+            {
+                Console.WriteLine($"[Warning] 未能在项目树中探测到 {fileName}，请手动加载。");
+            }
+        }
+
+        /// <summary>
+        /// [Member D] 新增：自适应路径探测算法
+        /// 从起始目录向上递归搜索指定文件，适用于团队协作中相对位置固定但绝对路径不同的场景
+        /// </summary>
+        private string FindMxdPath(string startDir, string fileName)
+        {
+            try
+            {
+                string current = startDir;
+                // 最多向上探测 5 级目录，防止陷入无限循环
+                for (int i = 0; i < 6; i++)
+                {
+                    // 1. 检查当前目录下是否有该文件
+                    string directPath = System.IO.Path.Combine(current, fileName);
+                    if (System.IO.File.Exists(directPath)) return directPath;
+
+                    // 2. 检查当前目录下的“初步”文件夹（常见存放地）
+                    string subPath = System.IO.Path.Combine(current, "初步", fileName);
+                    if (System.IO.File.Exists(subPath)) return subPath;
+
+                    // 3. 向上走一级
+                    var parent = System.IO.Directory.GetParent(current);
+                    if (parent == null) break;
+                    current = parent.FullName;
+                }
+            }
+            catch { }
+            return null;
         }
 
         /// <summary>
