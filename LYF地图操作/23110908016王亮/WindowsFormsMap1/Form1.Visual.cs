@@ -7,6 +7,7 @@ using ESRI.ArcGIS.Geometry;
 using ESRI.ArcGIS.SystemUI;
 using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.Windows.Forms;
 
 namespace WindowsFormsMap1
@@ -52,8 +53,13 @@ namespace WindowsFormsMap1
             }
         }
 
-        private Panel _panelSidebar;
-        private Panel _panelMainContent;
+        private Panel _panelSidebar; // [Member E] 新增：左侧现代导航栏
+        private Panel _panelMainContent; // [Member E] 新增：右侧主体区域容器
+        private Label _lblYear;       // [New] 年份显示
+
+        // [Member B] 共享状态
+        // [Member B] Added: 绑定地图事件监听器
+        // 注意：_dashboardYear 已在主分部类 Form1.cs 中定义
 
         public void SetUIMode(bool isPresentation)
         {
@@ -84,13 +90,14 @@ namespace WindowsFormsMap1
             _panelMainContent = new Panel { Dock = DockStyle.Fill, BackColor = System.Drawing.Color.AliceBlue };
             _panelSidebar = new Panel { Width = 80, Dock = DockStyle.Left, BackColor = System.Drawing.Color.LightSteelBlue, Padding = new Padding(5, 20, 5, 5) };
             AddSidebarButton("全景", 0);
+            AddSidebarButton("热力图", 1); // [New] 新增热力图入口
 
             _splitContainerVisual = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Horizontal, BorderStyle = BorderStyle.FixedSingle };
             _splitContainerVisual.SplitterDistance = (int)(tabPageVisual.Height * 0.7);
 
             // 2. 地图内容区
             Panel mapContainer = new Panel { Dock = DockStyle.Fill };
-            _panelMapToolbar = new Panel { Height = 40, Dock = DockStyle.Top, BackColor = System.Drawing.Color.WhiteSmoke };
+            _panelMapToolbar = new Panel { Height = 45, Dock = DockStyle.Top, BackColor = Color.White, Padding = new Padding(5) };
             AddMapNavigationButtons();
 
             axMapControlVisual.Parent = null;
@@ -108,9 +115,11 @@ namespace WindowsFormsMap1
             if (_dashboardForm == null || _dashboardForm.IsDisposed)
             {
                 _dashboardForm = new FormChart();
-                _dashboardForm.SetMapControl(axMapControlVisual);
                 _dashboardForm.SetMainForm(this);
             }
+            // [Fix] 每次初始化布局都重新绑定当前地图控件（处理演示/专业模式切换）
+            _dashboardForm.SetMapControl(axMapControlVisual);
+
             _dashboardForm.TopLevel = false;
             _dashboardForm.FormBorderStyle = FormBorderStyle.None;
             _dashboardForm.Dock = DockStyle.Fill;
@@ -157,22 +166,20 @@ namespace WindowsFormsMap1
                 axMapControlVisual.MousePointer = esriControlsMousePointer.esriPointerArrow;
             };
 
-            // 2. 识别
+            // 2. 识别 (自定义识别)
             var btnIdentify = CreateNavButton("识别");
             btnIdentify.Click += (s, e) =>
             {
-                ICommand cmd = new ControlsMapIdentifyToolClass();
-                cmd.OnCreate(axMapControlVisual.Object);
-                axMapControlVisual.CurrentTool = cmd as ITool;
+                // [Agent Modified] 改为自定义识别模式，不再使用原生对话框
+                axMapControlVisual.CurrentTool = null;
+                axMapControlVisual.MousePointer = esriControlsMousePointer.esriPointerIdentify;
             };
 
             // 2.1 [Agent Add] 联网搜索
             var btnWebSearch = CreateNavButton("联网搜索");
             btnWebSearch.Click += (s, e) =>
             {
-                // 清空当前工具，进入自定义搜索模式
                 axMapControlVisual.CurrentTool = null;
-                // 设置鼠标样式为“探询/搜索”状 (使用 Crosshair)
                 axMapControlVisual.MousePointer = esriControlsMousePointer.esriPointerCrosshair;
             };
 
@@ -242,14 +249,14 @@ namespace WindowsFormsMap1
 
         private Button CreateNavButton(string text)
         {
-            return new Button
+            Button btn = new Button
             {
                 Text = text,
-                Width = 60,
-                Height = 30,
-                FlatStyle = FlatStyle.System,
-                BackColor = System.Drawing.Color.White
+                Width = 75,
+                Height = 32
             };
+            ThemeEngine.ApplyButtonTheme(btn, false);
+            return btn;
         }
 
         /// <summary>
@@ -261,16 +268,14 @@ namespace WindowsFormsMap1
             btn.Text = text;
             btn.Size = new System.Drawing.Size(70, 70);
             btn.Location = new System.Drawing.Point(5, 20 + index * 80);
-            btn.FlatStyle = FlatStyle.Flat;
+            ThemeEngine.ApplyButtonTheme(btn, true); // 侧边栏主操作使用 Primary 样式
+            btn.BackColor = Color.White; // 稍微差异化，保持白色背景
+            btn.ForeColor = ThemeEngine.ColorText;
             btn.FlatAppearance.BorderSize = 1;
-            btn.FlatAppearance.BorderColor = System.Drawing.Color.LightSteelBlue;
-            btn.ForeColor = System.Drawing.Color.Black;
-            btn.BackColor = System.Drawing.Color.White;
-            btn.Cursor = Cursors.Hand;
-            btn.Font = new System.Drawing.Font("微软雅黑", 10F, System.Drawing.FontStyle.Bold);
+            btn.FlatAppearance.BorderColor = Color.FromArgb(226, 232, 240);
 
-            btn.MouseEnter += (s, e) => btn.BackColor = System.Drawing.Color.AliceBlue;
-            btn.MouseLeave += (s, e) => btn.BackColor = System.Drawing.Color.White;
+            btn.MouseEnter += (s, e) => { btn.BackColor = ThemeEngine.ColorSecondary; btn.ForeColor = ThemeEngine.ColorPrimary; };
+            btn.MouseLeave += (s, e) => { btn.BackColor = Color.White; btn.ForeColor = ThemeEngine.ColorText; };
 
             btn.Click += SidebarBtn_Click;
 
@@ -319,20 +324,39 @@ namespace WindowsFormsMap1
                     // [Member E] 触发时间演变模拟逻辑
                     SimulateTimeEvolution();
                     break;
+                case "热力图":
+                    // [New] 进入时空热力图模式
+                    EnterHeatmapMode();
+                    break;
             }
+
+            // 处理时间轴与热力图状态归一化
+            if (btn.Text == "热力图")
+            {
+                _isHeatmapMode = true;
+                EnterHeatmapMode();
+            }
+            else
+            {
+                _isHeatmapMode = false;
+                if (btn.Text == "全景") ResetRenderer();
+            }
+
+            // [Fix] 切换后通过统一年份同步一次地图
+            FilterMapByYear(_dashboardYear);
 
             axMapControlVisual.ActiveView.Refresh();
         }
 
         // [Member E] Modified: 修复同步逻辑，确保地图图层正确复制且不发生冲突
-        private void SyncToVisualMode()
+        private void SyncToVisualMode(bool force = false)
         {
             if (axMapControlVisual == null || axMapControl2 == null) return;
             try
             {
                 // [Member E] 同步专业版底图到演示版
-                // 仅在首次加载或用户明确同步时执行
-                if (axMapControlVisual.LayerCount == 0 && axMapControl2.LayerCount > 0)
+                // 仅在首次加载或用户明确同步时执行，或者强制同步时执行
+                if (force || (axMapControlVisual.LayerCount == 0 && axMapControl2.LayerCount > 0))
                 {
                     // 深度克隆地图对象（避免引用冲突引发的 COM 异常）
                     try
@@ -420,6 +444,8 @@ namespace WindowsFormsMap1
             catch { }
         }
 
+
+
         // [Member E] Added: 模拟时间演变逻辑
         private void SimulateTimeEvolution()
         {
@@ -427,13 +453,251 @@ namespace WindowsFormsMap1
             {
                 // 模拟一个简单的“年份增长”滤镜效果
                 MessageBox.Show("启动非遗历史演变模拟...", "时间轴模式");
-
-                // 逻辑示意：遍历年份，通过 DefinitionExpression 过滤图层
-                // 实际实现中需要异步循环
                 axMapControlVisual.ActiveView.Refresh();
             }
             catch { }
         }
+
+        // --- [New] 时空热力图相关逻辑 ---
+
+        private void EnterHeatmapMode()
+        {
+            // 1. 切换图层渲染为“热力图”
+            ApplyHeatmapRenderer();
+
+            // 2. 触发初始渲染 (使用统一年份)
+            RenderCityChoropleth(_dashboardYear);
+        }
+
+        private void ResetRenderer()
+        {
+            // 恢复普通点展示 (通过 FilterMapByYear 解除过滤并重置 Renderer 也可以，或者简单全图刷新)
+            // 先重置数据过滤，显示全部数据
+            FilterMapByYear(2099);
+
+            // 强制重新同步图层，覆盖热力图的临时符号
+            SyncToVisualMode(true);
+        }
+
+        private void ApplyHeatmapRenderer()
+        {
+            try
+            {
+                // 查找非遗图层
+                IFeatureLayer targetLayer = null;
+                for (int i = 0; i < axMapControlVisual.LayerCount; i++)
+                {
+                    ILayer l = axMapControlVisual.get_Layer(i);
+                    if (l.Name.Contains("非遗") || l.Name.Contains("项目"))
+                    {
+                        targetLayer = l as IFeatureLayer;
+                        break;
+                    }
+                }
+                if (targetLayer == null) return;
+
+                // [Fallback] 由于环境缺少 IHeatmapRenderer，回退到普通点符号渲染
+                // 使用红色圆点模拟
+                ISimpleMarkerSymbol pMarkerSymbol = new SimpleMarkerSymbolClass();
+                pMarkerSymbol.Style = esriSimpleMarkerStyle.esriSMSCircle;
+                pMarkerSymbol.Color = new RgbColorClass { Red = 255, Green = 0, Blue = 0 };
+                pMarkerSymbol.Size = 8;
+                // 注意：ArcEngine 默认 SimpleSymbol 不支持从 API 直接设置透明度(需要 ITransparencyRenderer)，此处仅设置颜色
+
+                ISimpleRenderer pSimpleRenderer = new SimpleRendererClass();
+                pSimpleRenderer.Symbol = pMarkerSymbol as ISymbol;
+
+                IGeoFeatureLayer geoLayer = targetLayer as IGeoFeatureLayer;
+                if (geoLayer != null)
+                {
+                    geoLayer.Renderer = pSimpleRenderer as IFeatureRenderer;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("渲染设置失败: " + ex.Message);
+            }
+
+            axMapControlVisual.ActiveView.Refresh();
+        }
+
+        private void UpdateHeatmapByYear(int year)
+        {
+            // [Removed] 冗余逻辑，现由 FilterMapByYear 统一驱动
+        }
+
+        /// <summary>
+        /// [Member E] 实现基于行政区划的“分级色彩热力图”
+        /// 逻辑：遍历16地市，查询当前年份的非遗数量，动态赋予颜色
+        /// </summary>
+        private void RenderCityChoropleth(int year)
+        {
+            try
+            {
+                // 1. 寻找地市面图层
+                IFeatureLayer cityLayer = null;
+                string nameField = "";
+
+                // 智能查找图层 (增强对 Pinyin 'shiqu' 的支持)
+                for (int i = 0; i < axMapControlVisual.LayerCount; i++)
+                {
+                    ILayer l = axMapControlVisual.get_Layer(i);
+                    if (l is IFeatureLayer && l.Visible && (l as IFeatureLayer).FeatureClass.ShapeType == esriGeometryType.esriGeometryPolygon)
+                    {
+                        string ln = l.Name.ToLower();
+                        // 匹配 shiqu, boundary, 市, 行政
+                        if (ln.Contains("shiqu") || ln.Contains("地市") || ln.Contains("行政") || ln.Contains("市") || ln.Contains("区划"))
+                        {
+                            // 排除明显不是的图层 (如 purely label)
+                            if (ln.Contains("ming") || ln.Contains("label") || ln.Contains("anno")) continue;
+
+                            cityLayer = l as IFeatureLayer;
+                            // 尝试自动识别名称字段
+                            IFields fields = cityLayer.FeatureClass.Fields;
+                            string[] pFields = { "NAME", "Name", "名称", "市", "CITY_NAME", "City", "DISHI", "DiShi" };
+                            foreach (var f in pFields)
+                            {
+                                if (fields.FindField(f) != -1) { nameField = f; break; }
+                            }
+
+                            // 如果没找到标准字段，尝试找第一个字符串字段
+                            if (string.IsNullOrEmpty(nameField))
+                            {
+                                for (int j = 0; j < fields.FieldCount; j++)
+                                {
+                                    if (fields.get_Field(j).Type == esriFieldType.esriFieldTypeString && fields.get_Field(j).Length > 1)
+                                    {
+                                        nameField = fields.get_Field(j).Name;
+                                        break;
+                                    }
+                                }
+                            }
+                            break;
+                        }
+                    }
+                }
+
+                if (cityLayer == null || string.IsNullOrEmpty(nameField))
+                {
+                    // Console.WriteLine("未找到地市图层或名称字段");
+                    return;
+                }
+
+                // 2. 准备唯一值渲染器
+                IUniqueValueRenderer pUVRenderer = new UniqueValueRendererClass();
+                pUVRenderer.FieldCount = 1;
+                pUVRenderer.set_Field(0, nameField);
+                pUVRenderer.UseDefaultSymbol = false;
+
+                // 3. 定义山东省16地市列表
+                string[] cities = new string[] {
+                    "济南市", "青岛市", "淄博市", "枣庄市", "东营市", "烟台市", "潍坊市", "济宁市",
+                    "泰安市", "威海市", "日照市", "临沂市", "德州市", "聊城市", "滨州市", "菏泽市"
+                };
+
+                // 4. 遍历城市，计算数量并生成符号
+                foreach (string city in cities)
+                {
+                    int count = GetCountByCityVisual(city, year);
+
+                    // 根据数量获取高对比度热力颜色
+                    IColor color = GetHighContrastHeatmapColor(count);
+
+                    ISimpleFillSymbol pFillSym = new SimpleFillSymbolClass();
+                    pFillSym.Style = esriSimpleFillStyle.esriSFSSolid;
+                    pFillSym.Color = color;
+                    pFillSym.Outline.Color = new RgbColorClass { Red = 100, Green = 100, Blue = 100 }; // 深灰边框
+                    pFillSym.Outline.Width = 1.0; // 加粗边框
+
+                    pUVRenderer.AddValue(city, "Category", pFillSym as ISymbol);
+                    pUVRenderer.AddValue(city.Replace("市", ""), "Category", pFillSym as ISymbol);
+                }
+
+                // 5. 应用渲染
+                (cityLayer as IGeoFeatureLayer).Renderer = pUVRenderer as IFeatureRenderer;
+
+                // 强制刷新
+                axMapControlVisual.ActiveView.PartialRefresh(esriViewDrawPhase.esriViewGeography, cityLayer, null);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("渲染 Choropleth 失败: " + ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// [Helper] 获取高对比度热力色 (黄 -> 橙 -> 鲜红 -> 深红)
+        /// </summary>
+        private IColor GetHighContrastHeatmapColor(int count)
+        {
+            RgbColorClass color = new RgbColorClass();
+            // 数量分级策略 (根据实际数据量级可能需要调整)
+            if (count == 0) { color.Red = 255; color.Green = 255; color.Blue = 255; } // 白色 (无数据)
+            else if (count <= 5) { color.Red = 255; color.Green = 255; color.Blue = 150; } // 浅黄
+            else if (count <= 10) { color.Red = 255; color.Green = 200; color.Blue = 0; } // 橙黄
+            else if (count <= 20) { color.Red = 255; color.Green = 120; color.Blue = 0; } // 橙色
+            else if (count <= 35) { color.Red = 255; color.Green = 50; color.Blue = 0; } // 橘红
+            else if (count <= 50) { color.Red = 220; color.Green = 0; color.Blue = 0; } // 鲜红
+            else { color.Red = 139; color.Green = 0; color.Blue = 0; } // 深褐红 (最高)
+            return color;
+        }
+
+        /// <summary>
+        /// [Helper] 基于 Visual Map 的轻量级统计
+        /// </summary>
+        private int GetCountByCityVisual(string cityName, int year)
+        {
+            // 简单复用逻辑：遍历点图层，统计包含 CityName 且符合 Year 的要素
+            try
+            {
+                IFeatureLayer pointLayer = null;
+                for (int i = 0; i < axMapControlVisual.LayerCount; i++)
+                {
+                    ILayer l = axMapControlVisual.get_Layer(i);
+                    if (l.Name.Contains("非遗") || l.Name.Contains("项目")) { pointLayer = l as IFeatureLayer; break; }
+                }
+                if (pointLayer == null) return 0;
+
+                string where = $"({GetCityField(pointLayer)} LIKE '%{cityName.Replace("市", "")}%') AND {GetTimeClause(pointLayer, year)}";
+                if (string.IsNullOrEmpty(where)) return 0;
+
+                IQueryFilter qf = new QueryFilterClass { WhereClause = where };
+                return pointLayer.FeatureClass.FeatureCount(qf);
+            }
+            catch { return 0; }
+        }
+
+        private string GetCityField(IFeatureLayer ly)
+        {
+            // 简易查找字段
+            string[] keys = { "市", "地区", "City", "Name", "所属" };
+            foreach (var k in keys)
+            {
+                int idx = ly.FeatureClass.Fields.FindField(k);
+                if (idx != -1) return ly.FeatureClass.Fields.get_Field(idx).Name;
+            }
+            return "PleaseCheckField";
+        }
+
+        private string GetTimeClause(IFeatureLayer ly, int year)
+        {
+            IFields fs = ly.FeatureClass.Fields;
+            string fName = "公布时间";
+            if (fs.FindField("公布时间") == -1)
+            {
+                if (fs.FindField("Time") != -1) fName = "Time";
+                else if (fs.FindField("Year") != -1) fName = "Year";
+                else return "1=1"; // 无时间字段则不过滤
+            }
+
+            // 批次映射
+            int batch = 1;
+            if (year >= 2008) batch = 2; if (year >= 2011) batch = 3; if (year >= 2014) batch = 4; if (year >= 2021) batch = 5;
+
+            // 简单混合查询
+            return $"(({fName} >= 1900 AND {fName} <= {year}) OR ({fName} > 0 AND {fName} <= {batch} AND {fName} < 20))";
+        }
+
 
         private void EnableLabelsForAllLayers()
         {
@@ -582,6 +846,12 @@ namespace WindowsFormsMap1
                 // 2. 依次过滤专业版和演示版地图 (Member D)
                 ApplyYearFilterToControl(axMapControl2, year);
                 ApplyYearFilterToControl(axMapControlVisual, year);
+
+                // 3. [Agent Add] 如果处于热力图模式，同步重绘分级色彩
+                if (_isHeatmapMode)
+                {
+                    RenderCityChoropleth(year);
+                }
             }
             catch (Exception) { }
         }
