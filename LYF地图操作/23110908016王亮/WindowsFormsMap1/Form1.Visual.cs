@@ -7,6 +7,7 @@ using ESRI.ArcGIS.Geometry;
 using ESRI.ArcGIS.SystemUI;
 using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.Windows.Forms;
 
 namespace WindowsFormsMap1
@@ -54,14 +55,12 @@ namespace WindowsFormsMap1
 
         private Panel _panelSidebar; // [Member E] 新增：左侧现代导航栏
         private Panel _panelMainContent; // [Member E] 新增：右侧主体区域容器
-        private Panel _panelTimeline; // [New] 时间轴容器
-        private TrackBar _timeSlider; // [New] 时间滑块
         private Label _lblYear;       // [New] 年份显示
-        
+
         // [Member B] 共享状态
         // [Member B] Added: 绑定地图事件监听器
         // 注意：_dashboardYear 已在主分部类 Form1.cs 中定义
-        
+
         public void SetUIMode(bool isPresentation)
         {
             // 1. 显隐专业工具
@@ -98,7 +97,7 @@ namespace WindowsFormsMap1
 
             // 2. 地图内容区
             Panel mapContainer = new Panel { Dock = DockStyle.Fill };
-            _panelMapToolbar = new Panel { Height = 40, Dock = DockStyle.Top, BackColor = System.Drawing.Color.WhiteSmoke };
+            _panelMapToolbar = new Panel { Height = 45, Dock = DockStyle.Top, BackColor = Color.White, Padding = new Padding(5) };
             AddMapNavigationButtons();
 
             axMapControlVisual.Parent = null;
@@ -116,9 +115,11 @@ namespace WindowsFormsMap1
             if (_dashboardForm == null || _dashboardForm.IsDisposed)
             {
                 _dashboardForm = new FormChart();
-                _dashboardForm.SetMapControl(axMapControlVisual);
                 _dashboardForm.SetMainForm(this);
             }
+            // [Fix] 每次初始化布局都重新绑定当前地图控件（处理演示/专业模式切换）
+            _dashboardForm.SetMapControl(axMapControlVisual);
+
             _dashboardForm.TopLevel = false;
             _dashboardForm.FormBorderStyle = FormBorderStyle.None;
             _dashboardForm.Dock = DockStyle.Fill;
@@ -127,11 +128,6 @@ namespace WindowsFormsMap1
 
             // 4. 安全组装 (修复：Controls.Clear() 会删掉 EagleEye)
             _panelMainContent.Controls.Add(_splitContainerVisual);
-            
-            // [New] 初始化时间轴 (默认隐藏)
-            InitTimelinePanel();
-            _panelMainContent.Controls.Add(_panelTimeline);
-            _panelTimeline.Visible = false;
 
             // [Member B] Added: 绑定地图事件监听器，实现全自动图表联动
             axMapControlVisual.OnMapReplaced += (s, ev) =>
@@ -170,22 +166,20 @@ namespace WindowsFormsMap1
                 axMapControlVisual.MousePointer = esriControlsMousePointer.esriPointerArrow;
             };
 
-            // 2. 识别
+            // 2. 识别 (自定义识别)
             var btnIdentify = CreateNavButton("识别");
             btnIdentify.Click += (s, e) =>
             {
-                ICommand cmd = new ControlsMapIdentifyToolClass();
-                cmd.OnCreate(axMapControlVisual.Object);
-                axMapControlVisual.CurrentTool = cmd as ITool;
+                // [Agent Modified] 改为自定义识别模式，不再使用原生对话框
+                axMapControlVisual.CurrentTool = null;
+                axMapControlVisual.MousePointer = esriControlsMousePointer.esriPointerIdentify;
             };
 
             // 2.1 [Agent Add] 联网搜索
             var btnWebSearch = CreateNavButton("联网搜索");
             btnWebSearch.Click += (s, e) =>
             {
-                // 清空当前工具，进入自定义搜索模式
                 axMapControlVisual.CurrentTool = null;
-                // 设置鼠标样式为“探询/搜索”状 (使用 Crosshair)
                 axMapControlVisual.MousePointer = esriControlsMousePointer.esriPointerCrosshair;
             };
 
@@ -255,14 +249,14 @@ namespace WindowsFormsMap1
 
         private Button CreateNavButton(string text)
         {
-            return new Button
+            Button btn = new Button
             {
                 Text = text,
-                Width = 60,
-                Height = 30,
-                FlatStyle = FlatStyle.System,
-                BackColor = System.Drawing.Color.White
+                Width = 75,
+                Height = 32
             };
+            ThemeEngine.ApplyButtonTheme(btn, false);
+            return btn;
         }
 
         /// <summary>
@@ -274,16 +268,14 @@ namespace WindowsFormsMap1
             btn.Text = text;
             btn.Size = new System.Drawing.Size(70, 70);
             btn.Location = new System.Drawing.Point(5, 20 + index * 80);
-            btn.FlatStyle = FlatStyle.Flat;
+            ThemeEngine.ApplyButtonTheme(btn, true); // 侧边栏主操作使用 Primary 样式
+            btn.BackColor = Color.White; // 稍微差异化，保持白色背景
+            btn.ForeColor = ThemeEngine.ColorText;
             btn.FlatAppearance.BorderSize = 1;
-            btn.FlatAppearance.BorderColor = System.Drawing.Color.LightSteelBlue;
-            btn.ForeColor = System.Drawing.Color.Black;
-            btn.BackColor = System.Drawing.Color.White;
-            btn.Cursor = Cursors.Hand;
-            btn.Font = new System.Drawing.Font("微软雅黑", 10F, System.Drawing.FontStyle.Bold);
+            btn.FlatAppearance.BorderColor = Color.FromArgb(226, 232, 240);
 
-            btn.MouseEnter += (s, e) => btn.BackColor = System.Drawing.Color.AliceBlue;
-            btn.MouseLeave += (s, e) => btn.BackColor = System.Drawing.Color.White;
+            btn.MouseEnter += (s, e) => { btn.BackColor = ThemeEngine.ColorSecondary; btn.ForeColor = ThemeEngine.ColorPrimary; };
+            btn.MouseLeave += (s, e) => { btn.BackColor = Color.White; btn.ForeColor = ThemeEngine.ColorText; };
 
             btn.Click += SidebarBtn_Click;
 
@@ -338,18 +330,20 @@ namespace WindowsFormsMap1
                     break;
             }
 
-            // 处理时间轴显隐
+            // 处理时间轴与热力图状态归一化
             if (btn.Text == "热力图")
             {
-                _panelTimeline.Visible = true;
-                _panelTimeline.BringToFront();
+                _isHeatmapMode = true;
+                EnterHeatmapMode();
             }
             else
             {
-                _panelTimeline.Visible = false;
-                // 复原渲染? 可选
-                if (btn.Text == "全景") ResetRenderer(); 
+                _isHeatmapMode = false;
+                if (btn.Text == "全景") ResetRenderer();
             }
+
+            // [Fix] 切换后通过统一年份同步一次地图
+            FilterMapByYear(_dashboardYear);
 
             axMapControlVisual.ActiveView.Refresh();
         }
@@ -466,79 +460,28 @@ namespace WindowsFormsMap1
 
         // --- [New] 时空热力图相关逻辑 ---
 
-        private void InitTimelinePanel()
-        {
-            _panelTimeline = new Panel
-            {
-                Height = 60,
-                Dock = DockStyle.Bottom,
-                BackColor = System.Drawing.Color.FromArgb(20, 20, 20), // 深色背景衬托
-                Padding = new Padding(10)
-            };
-
-            _lblYear = new Label
-            {
-                Text = "2006年",
-                ForeColor = System.Drawing.Color.White,
-                Font = new System.Drawing.Font("Arial", 14, System.Drawing.FontStyle.Bold),
-                AutoSize = true,
-                Location = new System.Drawing.Point(20, 15)
-            };
-
-            _timeSlider = new TrackBar
-            {
-                Minimum = 2006,
-                Maximum = 2025,
-                Value = 2006,
-                TickFrequency = 1,
-                Dock = DockStyle.Right,
-                Width = 600, // 初始宽度
-                TickStyle = TickStyle.TopLeft
-            };
-            // 调整 Slider 宽度适配
-            _timeSlider.AutoSize = false;
-            _timeSlider.Width = 500; 
-            _timeSlider.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Right | AnchorStyles.Left;
-            _timeSlider.Dock = DockStyle.None;
-            _timeSlider.Location = new System.Drawing.Point(120, 10);
-            _timeSlider.Width = _panelMainContent.Width - 150;
-
-            _timeSlider.Scroll += (s, e) =>
-            {
-                int year = _timeSlider.Value;
-                _lblYear.Text = $"{year}年";
-                UpdateHeatmapByYear(year);
-            };
-
-            _panelTimeline.Controls.Add(_lblYear);
-            _panelTimeline.Controls.Add(_timeSlider);
-            
-            // 响应大小变化
-            _panelTimeline.Resize += (s, e) => { _timeSlider.Width = _panelTimeline.Width - 140; };
-        }
-
         private void EnterHeatmapMode()
         {
-            // 1. 切换图层渲染为“热力图” (尝试使用 HeatmapRenderer 或 点密度)
+            // 1. 切换图层渲染为“热力图”
             ApplyHeatmapRenderer();
 
-            // 2. 将数据重置到当前滑块年份
-            UpdateHeatmapByYear(_timeSlider.Value);
+            // 2. 触发初始渲染 (使用统一年份)
+            RenderCityChoropleth(_dashboardYear);
         }
 
         private void ResetRenderer()
         {
-             // 恢复普通点展示 (通过 FilterMapByYear 解除过滤并重置 Renderer 也可以，或者简单全图刷新)
-             // 先重置数据过滤，显示全部数据
-             FilterMapByYear(2099); 
-             
-             // 强制重新同步图层，覆盖热力图的临时符号
-             SyncToVisualMode(true); 
+            // 恢复普通点展示 (通过 FilterMapByYear 解除过滤并重置 Renderer 也可以，或者简单全图刷新)
+            // 先重置数据过滤，显示全部数据
+            FilterMapByYear(2099);
+
+            // 强制重新同步图层，覆盖热力图的临时符号
+            SyncToVisualMode(true);
         }
 
         private void ApplyHeatmapRenderer()
         {
-            try 
+            try
             {
                 // 查找非遗图层
                 IFeatureLayer targetLayer = null;
@@ -574,17 +517,13 @@ namespace WindowsFormsMap1
             {
                 Console.WriteLine("渲染设置失败: " + ex.Message);
             }
-            
+
             axMapControlVisual.ActiveView.Refresh();
         }
 
         private void UpdateHeatmapByYear(int year)
         {
-            // 1. 过滤非遗点位 (保持现有逻辑)
-            FilterMapByYear(year);
-
-            // 2. [New] 更新地市分级渲染 (热力图核心)
-            RenderCityChoropleth(year);
+            // [Removed] 冗余逻辑，现由 FilterMapByYear 统一驱动
         }
 
         /// <summary>
@@ -598,7 +537,7 @@ namespace WindowsFormsMap1
                 // 1. 寻找地市面图层
                 IFeatureLayer cityLayer = null;
                 string nameField = "";
-                
+
                 // 智能查找图层 (增强对 Pinyin 'shiqu' 的支持)
                 for (int i = 0; i < axMapControlVisual.LayerCount; i++)
                 {
@@ -620,16 +559,16 @@ namespace WindowsFormsMap1
                             {
                                 if (fields.FindField(f) != -1) { nameField = f; break; }
                             }
-                            
+
                             // 如果没找到标准字段，尝试找第一个字符串字段
                             if (string.IsNullOrEmpty(nameField))
                             {
-                                for(int j=0; j<fields.FieldCount; j++)
+                                for (int j = 0; j < fields.FieldCount; j++)
                                 {
-                                    if(fields.get_Field(j).Type == esriFieldType.esriFieldTypeString && fields.get_Field(j).Length > 1) 
-                                    { 
-                                        nameField = fields.get_Field(j).Name; 
-                                        break; 
+                                    if (fields.get_Field(j).Type == esriFieldType.esriFieldTypeString && fields.get_Field(j).Length > 1)
+                                    {
+                                        nameField = fields.get_Field(j).Name;
+                                        break;
                                     }
                                 }
                             }
@@ -638,7 +577,7 @@ namespace WindowsFormsMap1
                     }
                 }
 
-                if (cityLayer == null || string.IsNullOrEmpty(nameField)) 
+                if (cityLayer == null || string.IsNullOrEmpty(nameField))
                 {
                     // Console.WriteLine("未找到地市图层或名称字段");
                     return;
@@ -663,7 +602,7 @@ namespace WindowsFormsMap1
 
                     // 根据数量获取高对比度热力颜色
                     IColor color = GetHighContrastHeatmapColor(count);
-                    
+
                     ISimpleFillSymbol pFillSym = new SimpleFillSymbolClass();
                     pFillSym.Style = esriSimpleFillStyle.esriSFSSolid;
                     pFillSym.Color = color;
@@ -676,7 +615,7 @@ namespace WindowsFormsMap1
 
                 // 5. 应用渲染
                 (cityLayer as IGeoFeatureLayer).Renderer = pUVRenderer as IFeatureRenderer;
-                
+
                 // 强制刷新
                 axMapControlVisual.ActiveView.PartialRefresh(esriViewDrawPhase.esriViewGeography, cityLayer, null);
             }
@@ -693,13 +632,13 @@ namespace WindowsFormsMap1
         {
             RgbColorClass color = new RgbColorClass();
             // 数量分级策略 (根据实际数据量级可能需要调整)
-            if (count == 0)       { color.Red = 255; color.Green = 255; color.Blue = 255; } // 白色 (无数据)
-            else if (count <= 5)  { color.Red = 255; color.Green = 255; color.Blue = 150; } // 浅黄
-            else if (count <= 10) { color.Red = 255; color.Green = 200; color.Blue = 0;   } // 橙黄
-            else if (count <= 20) { color.Red = 255; color.Green = 120; color.Blue = 0;   } // 橙色
-            else if (count <= 35) { color.Red = 255; color.Green = 50;  color.Blue = 0;   } // 橘红
-            else if (count <= 50) { color.Red = 220; color.Green = 0;   color.Blue = 0;   } // 鲜红
-            else                  { color.Red = 139; color.Green = 0;   color.Blue = 0;   } // 深褐红 (最高)
+            if (count == 0) { color.Red = 255; color.Green = 255; color.Blue = 255; } // 白色 (无数据)
+            else if (count <= 5) { color.Red = 255; color.Green = 255; color.Blue = 150; } // 浅黄
+            else if (count <= 10) { color.Red = 255; color.Green = 200; color.Blue = 0; } // 橙黄
+            else if (count <= 20) { color.Red = 255; color.Green = 120; color.Blue = 0; } // 橙色
+            else if (count <= 35) { color.Red = 255; color.Green = 50; color.Blue = 0; } // 橘红
+            else if (count <= 50) { color.Red = 220; color.Green = 0; color.Blue = 0; } // 鲜红
+            else { color.Red = 139; color.Green = 0; color.Blue = 0; } // 深褐红 (最高)
             return color;
         }
 
@@ -709,7 +648,7 @@ namespace WindowsFormsMap1
         private int GetCountByCityVisual(string cityName, int year)
         {
             // 简单复用逻辑：遍历点图层，统计包含 CityName 且符合 Year 的要素
-            try 
+            try
             {
                 IFeatureLayer pointLayer = null;
                 for (int i = 0; i < axMapControlVisual.LayerCount; i++)
@@ -719,9 +658,9 @@ namespace WindowsFormsMap1
                 }
                 if (pointLayer == null) return 0;
 
-                string where = $"({GetCityField(pointLayer)} LIKE '%{cityName.Replace("市","")}%') AND {GetTimeClause(pointLayer, year)}";
+                string where = $"({GetCityField(pointLayer)} LIKE '%{cityName.Replace("市", "")}%') AND {GetTimeClause(pointLayer, year)}";
                 if (string.IsNullOrEmpty(where)) return 0;
-                
+
                 IQueryFilter qf = new QueryFilterClass { WhereClause = where };
                 return pointLayer.FeatureClass.FeatureCount(qf);
             }
@@ -730,32 +669,33 @@ namespace WindowsFormsMap1
 
         private string GetCityField(IFeatureLayer ly)
         {
-             // 简易查找字段
-             string[] keys = { "市", "地区", "City", "Name", "所属" };
-             foreach(var k in keys) {
-                 int idx = ly.FeatureClass.Fields.FindField(k);
-                 if (idx != -1) return ly.FeatureClass.Fields.get_Field(idx).Name;
-             }
-             return "PleaseCheckField";
+            // 简易查找字段
+            string[] keys = { "市", "地区", "City", "Name", "所属" };
+            foreach (var k in keys)
+            {
+                int idx = ly.FeatureClass.Fields.FindField(k);
+                if (idx != -1) return ly.FeatureClass.Fields.get_Field(idx).Name;
+            }
+            return "PleaseCheckField";
         }
 
         private string GetTimeClause(IFeatureLayer ly, int year)
         {
-             IFields fs = ly.FeatureClass.Fields;
-             string fName = "公布时间";
-             if (fs.FindField("公布时间") == -1) 
-             {
-                 if (fs.FindField("Time") != -1) fName = "Time";
-                 else if (fs.FindField("Year") != -1) fName = "Year";
-                 else return "1=1"; // 无时间字段则不过滤
-             }
-             
-             // 批次映射
-             int batch = 1;
-             if (year>=2008) batch=2; if(year>=2011) batch=3; if(year>=2014) batch=4; if(year>=2021) batch=5;
+            IFields fs = ly.FeatureClass.Fields;
+            string fName = "公布时间";
+            if (fs.FindField("公布时间") == -1)
+            {
+                if (fs.FindField("Time") != -1) fName = "Time";
+                else if (fs.FindField("Year") != -1) fName = "Year";
+                else return "1=1"; // 无时间字段则不过滤
+            }
 
-             // 简单混合查询
-             return $"(({fName} >= 1900 AND {fName} <= {year}) OR ({fName} > 0 AND {fName} <= {batch} AND {fName} < 20))";
+            // 批次映射
+            int batch = 1;
+            if (year >= 2008) batch = 2; if (year >= 2011) batch = 3; if (year >= 2014) batch = 4; if (year >= 2021) batch = 5;
+
+            // 简单混合查询
+            return $"(({fName} >= 1900 AND {fName} <= {year}) OR ({fName} > 0 AND {fName} <= {batch} AND {fName} < 20))";
         }
 
 
@@ -906,6 +846,12 @@ namespace WindowsFormsMap1
                 // 2. 依次过滤专业版和演示版地图 (Member D)
                 ApplyYearFilterToControl(axMapControl2, year);
                 ApplyYearFilterToControl(axMapControlVisual, year);
+
+                // 3. [Agent Add] 如果处于热力图模式，同步重绘分级色彩
+                if (_isHeatmapMode)
+                {
+                    RenderCityChoropleth(year);
+                }
             }
             catch (Exception) { }
         }
