@@ -6,6 +6,7 @@ using ESRI.ArcGIS.Geometry;
 using ESRI.ArcGIS.Display;
 using ESRI.ArcGIS.esriSystem;
 using System;
+using System.Drawing;
 using System.Collections.Generic;
 using System.Windows.Forms;
 
@@ -23,17 +24,18 @@ namespace WindowsFormsMap1
         private IPolygon _queryPoly;
 
         // ================= 初始化 =================
-        // ================= 初始化 =================
         public void InitSmartTools()
         {
             // [Modified] 用户要求显示为 "智能工具箱" 且放在显著位置
             ToolStripMenuItem smartMenu = new ToolStripMenuItem("智能工具箱");
+            smartMenu.Image = ThemeEngine.GetIcon("Toolbox", Color.Black);
+            smartMenu.TextImageRelation = TextImageRelation.ImageAboveText;
 
             // 1. 路径规划 (合并入口)
             // 用户要求：点击“路径规划”后，弹出一个弹窗来，在里面进行构建路网和规划面板
             ToolStripMenuItem routeItem = new ToolStripMenuItem("路径规划");
-            routeItem.Click += (s, e) => 
-            { 
+            routeItem.Click += (s, e) =>
+            {
                 if (_routeForm == null || _routeForm.IsDisposed)
                 {
                     _routeForm = new FormRoute(this, _analysisHelper);
@@ -45,8 +47,8 @@ namespace WindowsFormsMap1
 
             // 2. 缓冲区
             // 2. 缓冲区 (统一入口)
-            smartMenu.DropDownItems.Add("交互式缓冲区工具箱", null, (s, e) => 
-            { 
+            smartMenu.DropDownItems.Add("交互式缓冲区工具箱", null, (s, e) =>
+            {
                 if (SmartBufferForm == null || SmartBufferForm.IsDisposed)
                 {
                     SmartBufferForm = new FormSmartBuffer(this);
@@ -56,7 +58,8 @@ namespace WindowsFormsMap1
             });
 
             // 3. 辅助功能
-            smartMenu.DropDownItems.Add("清除所有绘图", null, (s, e) => { 
+            smartMenu.DropDownItems.Add("清除所有绘图", null, (s, e) =>
+            {
                 axMapControl2.ActiveView.GraphicsContainer.DeleteAllElements();
                 axMapControl2.ActiveView.Refresh();
             });
@@ -73,7 +76,37 @@ namespace WindowsFormsMap1
 
         // ================= 业务逻辑实现 =================
 
+        // [Agent (通用辅助)] Modified: 支持路网缓存加载
         public void BuildRoadNetwork()
+        {
+            ILayer layer = GetSelectedLayer();
+            if (layer is IFeatureLayer fl && fl.FeatureClass.ShapeType == esriGeometryType.esriGeometryPolyline)
+            {
+                this.Cursor = Cursors.WaitCursor;
+
+                // 先尝试加载缓存
+                if (_analysisHelper.TryLoadNetworkCache(fl))
+                {
+                    this.Cursor = Cursors.Default;
+                    MessageBox.Show($"路网缓存加载成功!\n\n已从缓存恢复路网结构,无需重新构建。\n\n提示:如需重新构建,请在路径规划窗口中点击\"重新构建路网\"按钮。",
+                        "缓存加载", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+                else
+                {
+                    // 缓存不存在或加载失败,执行完整构建
+                    string msg = _analysisHelper.BuildNetwork(fl);
+                    this.Cursor = Cursors.Default;
+                    MessageBox.Show(msg);
+                }
+            }
+            else
+            {
+                MessageBox.Show("请先在TOC中选中一个线状道路图层!\n(右键点击图层 -> 确保选中状态)");
+            }
+        }
+
+        // [Agent (通用辅助)] Added: 强制重建路网(跳过缓存)
+        public void ForceBuildRoadNetwork()
         {
             ILayer layer = GetSelectedLayer();
             if (layer is IFeatureLayer fl && fl.FeatureClass.ShapeType == esriGeometryType.esriGeometryPolyline)
@@ -85,7 +118,7 @@ namespace WindowsFormsMap1
             }
             else
             {
-                MessageBox.Show("请先在TOC中选中一个线状道路图层！\n(右键点击图层 -> 确保选中状态)");
+                MessageBox.Show("请先在TOC中选中一个线状道路图层!\n(右键点击图层 -> 确保选中状态)");
             }
         }
 
@@ -129,11 +162,11 @@ namespace WindowsFormsMap1
                 IRgbColor color = new RgbColorClass { Blue = 255 };
                 color.Transparency = 100;
                 DrawGeometry(bufGeo, color);
-                
+
                 // 询问是否查询包含的要素
                 if (MessageBox.Show("是否查询缓冲区内的要素？", "查询", MessageBoxButtons.YesNo) == DialogResult.Yes)
                 {
-                     PerformSpatialQuery(bufGeo);
+                    PerformSpatialQuery(bufGeo);
                 }
             }
         }
@@ -146,7 +179,7 @@ namespace WindowsFormsMap1
             if (double.TryParse(input, out double rKm))
             {
                 double rMap = ConvertKmToMapUnit(rKm);
-                
+
                 ITopologicalOperator topo = lineGeo as ITopologicalOperator;
                 IGeometry bufGeo = topo.Buffer(rMap);
 
@@ -180,7 +213,7 @@ namespace WindowsFormsMap1
             {
                 int count = AnalysisHelper.SelectFeatures(fl, filterGeo);
                 axMapControl2.ActiveView.PartialRefresh(esriViewDrawPhase.esriViewGeoSelection, null, null);
-                
+
                 // [Modified] Use new Query Result Form
                 FormQueryResult resForm = new FormQueryResult(fl, count);
                 resForm.ShowDialog();
@@ -234,7 +267,7 @@ namespace WindowsFormsMap1
                 axMapControl2.ActiveView.PartialRefresh(esriViewDrawPhase.esriViewGeography, null, null);
                 axMapControl2.ActiveView.PartialRefresh(esriViewDrawPhase.esriViewGraphics, null, null);
             }
-        }        
+        }
 
         // ================= 数据加载逻辑 =================
 

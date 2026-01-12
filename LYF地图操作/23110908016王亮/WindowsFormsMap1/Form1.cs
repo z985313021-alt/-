@@ -29,7 +29,7 @@ namespace WindowsFormsMap1
             (markerEle as IElement).Geometry = pt;
             markerEle.Symbol = new SimpleMarkerSymbolClass { Color = new RgbColorClass { Red = 0, Green = 0, Blue = 255 }, Size = 8, Style = esriSimpleMarkerStyle.esriSMSCircle };
             axMapControl2.ActiveView.GraphicsContainer.AddElement(markerEle as IElement, 0);
-            
+
             // 添加文字标签 (使用 TextElement)
             ITextElement textEle = new TextElementClass { Text = index.ToString() };
             (textEle as IElement).Geometry = pt;
@@ -43,8 +43,8 @@ namespace WindowsFormsMap1
         {
             if (axMapControl2 != null)
             {
-               axMapControl2.ActiveView.GraphicsContainer.DeleteAllElements();
-               axMapControl2.ActiveView.Refresh();
+                axMapControl2.ActiveView.GraphicsContainer.DeleteAllElements();
+                axMapControl2.ActiveView.Refresh();
             }
         }
         private EditorHelper _editorHelper;
@@ -55,8 +55,8 @@ namespace WindowsFormsMap1
 
         // ================= 状态管理 =================
         // ================= 状态管理 =================
-        public enum MapToolMode 
-        { 
+        public enum MapToolMode
+        {
             None, Pan, MeasureDistance, MeasureArea, CreateFeature,
             // [Member C] 新增模式
             BufferPoint, BufferLine, RouteStart, RouteEnd, QueryBox, QueryPolygon,
@@ -80,6 +80,7 @@ namespace WindowsFormsMap1
         {
             // [Agent Add] 全局样式注入
             ThemeEngine.ApplyTheme(this);
+            ApplyMenuIcons(); // 应用图标
             ThemeEngine.ApplyMenuStripTheme(menuStrip1);
             ThemeEngine.ApplyStatusStripTheme(statusStrip1);
             ThemeEngine.ApplyTabControlTheme(tabControl1);
@@ -90,6 +91,11 @@ namespace WindowsFormsMap1
             splitter2.BackColor = Color.FromArgb(226, 232, 240);
             tabPage1.BackColor = Color.White;
             tabPage2.BackColor = Color.White;
+
+            // [New] 隐藏 TabControl 标签并创建自定义切换器
+            tabControl1.ItemSize = new Size(0, 1);
+            tabControl1.SizeMode = TabSizeMode.Fixed;
+            InitViewSwitcher();
 
             // 1. 初始化核心 Helper (必须在 UI 逻辑之前)
             _measureHelper = new MeasureHelper(axMapControl2);
@@ -121,6 +127,81 @@ namespace WindowsFormsMap1
                 else
                     TabControl1_SelectedIndexChanged(null, null); // 即使索引已经是2也强制触发
             }));
+        }
+
+        private void ApplyMenuIcons()
+        {
+            数据加载ToolStripMenuItem.Image = ThemeEngine.GetIcon("Data");
+            地图量测ToolStripMenuItem.Image = ThemeEngine.GetIcon("Measure");
+            刷新ToolStripMenuItem.Image = ThemeEngine.GetIcon("Refresh");
+            清除选择集ToolStripMenuItem.Image = ThemeEngine.GetIcon("Clear");
+            漫游ToolStripMenuItem.Image = ThemeEngine.GetIcon("Pan");
+            menuMapping.Image = ThemeEngine.GetIcon("Mapping");
+            menuQuery.Image = ThemeEngine.GetIcon("Query");
+            menuAnalysis.Image = ThemeEngine.GetIcon("Analysis");
+            menuLayout.Image = ThemeEngine.GetIcon("Layout");
+            menuEditing.Image = ThemeEngine.GetIcon("Edit");
+        }
+
+        private void InitViewSwitcher()
+        {
+            Panel p = new Panel
+            {
+                Size = new Size(120, 30),
+                BackColor = Color.FromArgb(200, Color.White),
+                BorderStyle = BorderStyle.None,
+                Anchor = AnchorStyles.Bottom | AnchorStyles.Left
+            };
+
+            // 将切换器放在 MapControl 容器上方
+            p.Location = new System.Drawing.Point(10, tabPage1.Height - 40);
+
+            Button btnData = CreateSwitcherButton("Data", 0, "数据视图");
+            Button btnLayout = CreateSwitcherButton("Layout", 1, "布局视图");
+            Button btnVisual = CreateSwitcherButton("Visual", 2, "演示模式");
+
+            btnData.Click += (s, e) => tabControl1.SelectedIndex = 0;
+            btnLayout.Click += (s, e) => tabControl1.SelectedIndex = 1;
+            btnVisual.Click += (s, e) => tabControl1.SelectedIndex = 2;
+
+            p.Controls.Add(btnData);
+            p.Controls.Add(btnLayout);
+            p.Controls.Add(btnVisual);
+
+            // 由于 MapControl 在 TabPage 内部，我们将切换器添加到窗体层级以保证可见性，或者添加到每个 TabPage 下方
+            // 按照需求，“换到 mapcontrol 的下方”，我们将其添加到对应的 TabPage 中
+            tabPage1.Controls.Add(p);
+            p.BringToFront();
+
+            // 为布局视图也添加一个
+            Panel p2 = new Panel { Size = p.Size, BackColor = p.BackColor, Location = p.Location, Anchor = p.Anchor };
+            p2.Controls.Add(CreateSwitcherButton("Data", 0, "数据视图", true));
+            p2.Controls.Add(CreateSwitcherButton("Layout", 1, "布局视图", true));
+            p2.Controls.Add(CreateSwitcherButton("Visual", 2, "演示模式", true));
+            foreach (Control c in p2.Controls)
+            {
+                if (c is Button b) b.Click += (s, e) => tabControl1.SelectedIndex = int.Parse(b.Tag.ToString());
+            }
+            tabPage2.Controls.Add(p2);
+            p2.BringToFront();
+        }
+
+        private Button CreateSwitcherButton(string iconType, int index, string tip, bool isSimple = false)
+        {
+            Button b = new Button
+            {
+                Size = new Size(30, 24),
+                Location = new System.Drawing.Point(5 + index * 35, 3),
+                FlatStyle = FlatStyle.Flat,
+                Image = ThemeEngine.GetIcon(iconType, Color.Black),
+                Tag = index,
+                Cursor = Cursors.Hand
+            };
+            b.FlatAppearance.BorderSize = 0;
+            b.FlatAppearance.MouseOverBackColor = Color.LightSkyBlue;
+            ToolTip tt = new ToolTip();
+            tt.SetToolTip(b, tip);
+            return b;
         }
 
         private void LoadDefaultMxd()
