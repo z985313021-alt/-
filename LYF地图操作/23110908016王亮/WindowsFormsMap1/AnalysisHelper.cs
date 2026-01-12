@@ -7,6 +7,9 @@ using ESRI.ArcGIS.Geometry;
 using System.Runtime.InteropServices;
 using ESRI.ArcGIS.Display;
 using ESRI.ArcGIS.esriSystem;
+// [Agent (通用辅助)] Added: 路网缓存序列化支持
+using System.IO;
+using System.Web.Script.Serialization;
 
 namespace WindowsFormsMap1
 {
@@ -17,6 +20,33 @@ namespace WindowsFormsMap1
     /// </summary>
     public class AnalysisHelper
     {
+        // [Agent (通用辅助)] Added: 可序列化的路网数据结构
+        [Serializable]
+        private class SerializableNode
+        {
+            public int Id { get; set; }
+            public double X { get; set; }
+            public double Y { get; set; }
+            public List<SerializableEdge> Edges { get; set; } = new List<SerializableEdge>();
+        }
+
+        [Serializable]
+        private class SerializableEdge
+        {
+            public int TargetNodeId { get; set; }
+            public double Weight { get; set; }
+            public List<double[]> GeometryPoints { get; set; } = new List<double[]>();
+        }
+
+        [Serializable]
+        private class NetworkCache
+        {
+            public List<SerializableNode> Nodes { get; set; }
+            public double MergeTolerance { get; set; }
+            public string LayerName { get; set; }
+            public DateTime BuildTime { get; set; }
+        }
+
         private class GraphNode
         {
             public int Id;
@@ -28,15 +58,24 @@ namespace WindowsFormsMap1
         {
             public int TargetNodeId;
             public double Weight;
-            public IPolyline Geometry; 
+            public IPolyline Geometry;
         }
 
         private Dictionary<int, GraphNode> _graph;
         private IFeatureLayer _roadLayer;
         private ISpatialReference _mapSR; // 缓存路网空间参考
-        private double _mergeTolerance = 0.0001; 
+        private double _mergeTolerance = 0.0001;
+        // [Agent (通用辅助)] Added: 缓存文件路径
+        private string _cacheDirectory = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "WindowsFormsMap1", "NetworkCache");
 
-        public AnalysisHelper() { }
+        public AnalysisHelper()
+        {
+            // 确保缓存目录存在
+            if (!Directory.Exists(_cacheDirectory))
+            {
+                Directory.CreateDirectory(_cacheDirectory);
+            }
+        }
 
         public string BuildNetwork(IFeatureLayer roadLayer)
         {
@@ -71,14 +110,14 @@ namespace WindowsFormsMap1
                 PolylineClass unionLine = new PolylineClass();
                 unionLine.SpatialReference = _mapSR;
                 ITopologicalOperator2 topoOp = unionLine as ITopologicalOperator2;
-                topoOp.ConstructUnion(geoBag as IEnumGeometry); 
+                topoOp.ConstructUnion(geoBag as IEnumGeometry);
                 // 此时 unionLine 已经是包含所有打断后线段的复杂多义线了
 
                 // 3. 构建图结构
                 _graph = new Dictionary<int, GraphNode>();
                 Dictionary<string, int> nodeLookup = new Dictionary<string, int>();
-                
-                if (_mapSR is IProjectedCoordinateSystem) _mergeTolerance = 1.0; 
+
+                if (_mapSR is IProjectedCoordinateSystem) _mergeTolerance = 1.0;
                 else _mergeTolerance = 0.00001;
 
                 // 遍历打断后的每一段 (Segment)
@@ -95,7 +134,7 @@ namespace WindowsFormsMap1
                     PolylineClass edgePoly = new PolylineClass();
                     edgePoly.SpatialReference = _mapSR;
                     (edgePoly as ISegmentCollection).AddSegment(segment);
-                    
+
                     int u = GetOrCreateNodeId(segment.FromPoint, nodeLookup, ref nextNodeId);
                     int v = GetOrCreateNodeId(segment.ToPoint, nodeLookup, ref nextNodeId);
 
@@ -109,7 +148,10 @@ namespace WindowsFormsMap1
                     segments.Next(out segment, ref partIndex, ref segIndex);
                 }
 
-                return $"路网重构成功！\n\n【拓扑优化报告】\n原始路段数: {count}\n拓扑打断后节点数: {_graph.Count}\n(节点数已大幅增加，所有交叉口已打通)";
+                // [Agent (通用辅助)] Added: 保存路网缓存
+                SaveNetworkCache(roadLayer.Name);
+
+                return $"路网重构成功!\n\n【拓扑优化报告】\n原始路段数: {count}\n拓扑打断后节点数: {_graph.Count}\n(节点数已大幅增加,所有交叉口已打通)\n\n缓存已保存,下次启动将自动加载。";
             }
             catch (Exception ex)
             {
@@ -128,6 +170,143 @@ namespace WindowsFormsMap1
                 _graph[id] = new GraphNode { Id = id, Point = (pt as IClone).Clone() as IPoint };
             }
             return lookup[key];
+        }
+
+        // [Agent (通用辅助)] Added: 保存路网缓存到文件
+        private void SaveNetworkCache(string layerName)
+        {
+            try
+            {
+                var cache = new NetworkCache
+                {
+                    LayerName = layerName,
+                    MergeTolerance = _mergeTolerance,
+                    BuildTime = DateTime.Now,
+                    Nodes = new List<SerializableNode>()
+                };
+
+                // 将图结构转换为可序列化格式
+                foreach (var node in _graph.Values)
+                {
+                    var sNode = new SerializableNode
+                    {
+                        Id = node.Id,
+                        X = node.Point.X,
+                        Y = node.Point.Y
+                    };
+
+                    foreach (var edge in node.Edges)
+                    {
+                        var sEdge = new SerializableEdge
+                        {
+                            TargetNodeId = edge.TargetNodeId,
+                            Weight = edge.Weight
+                        };
+
+                        // 提取几何点坐标
+                        IPointCollection ptColl = edge.Geometry as IPointCollection;
+                        for (int i = 0; i < ptColl.PointCount; i++)
+                        {
+                            IPoint pt = ptColl.Point[i];
+                            sEdge.GeometryPoints.Add(new double[] { pt.X, pt.Y });
+                        }
+
+                        sNode.Edges.Add(sEdge);
+                    }
+
+                    cache.Nodes.Add(sNode);
+                }
+
+                // 保存到文件
+                string cacheFile = System.IO.Path.Combine(_cacheDirectory, $"{SanitizeFileName(layerName)}_cache.json");
+                var serializer = new JavaScriptSerializer();
+                string json = serializer.Serialize(cache);
+                File.WriteAllText(cacheFile, json);
+            }
+            catch (Exception ex)
+            {
+                // 缓存保存失败不影响主流程
+                System.Diagnostics.Debug.WriteLine($"保存路网缓存失败: {ex.Message}");
+            }
+        }
+
+        // [Agent (通用辅助)] Added: 从文件加载路网缓存
+        private bool LoadNetworkCache(string layerName, ISpatialReference spatialRef)
+        {
+            try
+            {
+                string cacheFile = System.IO.Path.Combine(_cacheDirectory, $"{SanitizeFileName(layerName)}_cache.json");
+                if (!File.Exists(cacheFile)) return false;
+
+                string json = File.ReadAllText(cacheFile);
+                var serializer = new JavaScriptSerializer();
+                var cache = serializer.Deserialize<NetworkCache>(json);
+
+                if (cache == null || cache.Nodes == null) return false;
+
+                // 重建图结构
+                _graph = new Dictionary<int, GraphNode>();
+                _mergeTolerance = cache.MergeTolerance;
+                _mapSR = spatialRef;
+
+                foreach (var sNode in cache.Nodes)
+                {
+                    var node = new GraphNode
+                    {
+                        Id = sNode.Id,
+                        Point = new PointClass { X = sNode.X, Y = sNode.Y, SpatialReference = spatialRef }
+                    };
+
+                    foreach (var sEdge in sNode.Edges)
+                    {
+                        var edge = new GraphEdge
+                        {
+                            TargetNodeId = sEdge.TargetNodeId,
+                            Weight = sEdge.Weight,
+                            Geometry = new PolylineClass { SpatialReference = spatialRef }
+                        };
+
+                        // 重建几何
+                        IPointCollection ptColl = edge.Geometry as IPointCollection;
+                        foreach (var coords in sEdge.GeometryPoints)
+                        {
+                            ptColl.AddPoint(new PointClass { X = coords[0], Y = coords[1], SpatialReference = spatialRef });
+                        }
+
+                        node.Edges.Add(edge);
+                    }
+
+                    _graph[node.Id] = node;
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"加载路网缓存失败: {ex.Message}");
+                return false;
+            }
+        }
+
+        // [Agent (通用辅助)] Added: 尝试加载缓存,返回是否成功
+        public bool TryLoadNetworkCache(IFeatureLayer roadLayer)
+        {
+            if (roadLayer == null || roadLayer.FeatureClass == null) return false;
+
+            _roadLayer = roadLayer;
+            var spatialRef = (roadLayer.FeatureClass as IGeoDataset).SpatialReference;
+
+            return LoadNetworkCache(roadLayer.Name, spatialRef);
+        }
+
+        // [Agent (通用辅助)] Added: 清理文件名中的非法字符
+        private string SanitizeFileName(string fileName)
+        {
+            foreach (char c in System.IO.Path.GetInvalidFileNameChars())
+            {
+                fileName = fileName.Replace(c, '_');
+            }
+            return fileName;
         }
 
         public IPolyline FindShortestPath(IPoint startPt, IPoint endPt)
@@ -149,7 +328,7 @@ namespace WindowsFormsMap1
 
             // Dijkstra
             var distances = new Dictionary<int, double>();
-            var previous = new Dictionary<int, KeyValuePair<int, IPolyline>>(); 
+            var previous = new Dictionary<int, KeyValuePair<int, IPolyline>>();
             var visited = new HashSet<int>();
             PriorityQueue<int, double> pq = new PriorityQueue<int, double>();
 
@@ -170,11 +349,11 @@ namespace WindowsFormsMap1
             while (pq.Count > 0)
             {
                 int u = pq.Dequeue();
-                
-                if (targetSet.Contains(u)) 
-                { 
-                    reachedEndId = u; 
-                    break; 
+
+                if (targetSet.Contains(u))
+                {
+                    reachedEndId = u;
+                    break;
                 }
 
                 if (visited.Contains(u)) continue;
@@ -202,7 +381,7 @@ namespace WindowsFormsMap1
                     double d = (ePt as IProximityOperator).ReturnDistance(_graph[vid].Point);
                     if (d < minD) { minD = d; finalEndId = vid; }
                 }
-                
+
                 if (finalEndId == -1 && startNodes.Count > 0) finalEndId = startNodes[0];
             }
 

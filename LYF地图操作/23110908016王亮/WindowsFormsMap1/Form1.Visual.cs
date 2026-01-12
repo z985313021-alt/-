@@ -88,9 +88,12 @@ namespace WindowsFormsMap1
 
             // 1. 结构化容器
             _panelMainContent = new Panel { Dock = DockStyle.Fill, BackColor = System.Drawing.Color.AliceBlue };
-            _panelSidebar = new Panel { Width = 80, Dock = DockStyle.Left, BackColor = System.Drawing.Color.LightSteelBlue, Padding = new Padding(5, 20, 5, 5) };
+            _panelSidebar = new Panel { Width = 80, Dock = DockStyle.Left, BackColor = Color.White, Padding = new Padding(5, 20, 5, 5) };
             AddSidebarButton("全景", 0);
-            AddSidebarButton("热力图", 1); // [New] 新增热力图入口
+            AddSidebarButton("地市", 1);
+            AddSidebarButton("分类", 2);
+            AddSidebarButton("热力图", 3);
+            AddSidebarButton("返回", 4); // 紧跟在后面
 
             _splitContainerVisual = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Horizontal, BorderStyle = BorderStyle.FixedSingle };
             _splitContainerVisual.SplitterDistance = (int)(tabPageVisual.Height * 0.7);
@@ -159,7 +162,7 @@ namespace WindowsFormsMap1
         private void AddMapNavigationButtons()
         {
             // 1. 指针 (恢复默认状态)
-            var btnPointer = CreateNavButton("指针");
+            var btnPointer = CreateNavIconBtn("Pointer", "选择/指针");
             btnPointer.Click += (s, e) =>
             {
                 axMapControlVisual.CurrentTool = null;
@@ -167,16 +170,15 @@ namespace WindowsFormsMap1
             };
 
             // 2. 识别 (自定义识别)
-            var btnIdentify = CreateNavButton("识别");
+            var btnIdentify = CreateNavIconBtn("Identify", "属性识别");
             btnIdentify.Click += (s, e) =>
             {
-                // [Agent Modified] 改为自定义识别模式，不再使用原生对话框
                 axMapControlVisual.CurrentTool = null;
                 axMapControlVisual.MousePointer = esriControlsMousePointer.esriPointerIdentify;
             };
 
             // 2.1 [Agent Add] 联网搜索
-            var btnWebSearch = CreateNavButton("联网搜索");
+            var btnWebSearch = CreateNavIconBtn("Web", "互联网搜索");
             btnWebSearch.Click += (s, e) =>
             {
                 axMapControlVisual.CurrentTool = null;
@@ -184,7 +186,7 @@ namespace WindowsFormsMap1
             };
 
             // 3. 漫游
-            var btnPan = CreateNavButton("漫游");
+            var btnPan = CreateNavIconBtn("Pan", "漫游");
             btnPan.Click += (s, e) =>
             {
                 ICommand cmd = new ControlsMapPanToolClass();
@@ -193,7 +195,7 @@ namespace WindowsFormsMap1
             };
 
             // 4. 放大
-            var btnZoomIn = CreateNavButton("放大");
+            var btnZoomIn = CreateNavIconBtn("ZoomIn", "放大");
             btnZoomIn.Click += (s, e) =>
             {
                 ICommand cmd = new ControlsMapZoomInToolClass();
@@ -202,7 +204,7 @@ namespace WindowsFormsMap1
             };
 
             // 5. 缩小
-            var btnZoomOut = CreateNavButton("缩小");
+            var btnZoomOut = CreateNavIconBtn("ZoomOut", "缩小");
             btnZoomOut.Click += (s, e) =>
             {
                 ICommand cmd = new ControlsMapZoomOutToolClass();
@@ -211,27 +213,22 @@ namespace WindowsFormsMap1
             };
 
             // 6. 全图
-            var btnFull = CreateNavButton("全图");
+            var btnFull = CreateNavIconBtn("Full", "全图显示");
             btnFull.Click += (s, e) => { axMapControlVisual.Extent = axMapControlVisual.FullExtent; axMapControlVisual.ActiveView.Refresh(); };
 
             // 7. 清除 (清除高亮选择)
-            var btnClear = CreateNavButton("清除");
+            var btnClear = CreateNavIconBtn("Clear", "清除选择");
             btnClear.Click += (s, e) =>
             {
-                // 1. 清除地图选择集
                 axMapControlVisual.Map.ClearSelection();
-
-                // 2. 清除可能的图形元素 (如画笔绘制的临时图形)
                 axMapControlVisual.ActiveView.GraphicsContainer.DeleteAllElements();
-
-                // 3. 强制全图刷新 (以解决高亮残留问题)
                 axMapControlVisual.ActiveView.Refresh();
             };
 
             // 按顺序添加到工具栏
             _panelMapToolbar.Controls.Add(btnPointer);
             _panelMapToolbar.Controls.Add(btnIdentify);
-            _panelMapToolbar.Controls.Add(btnWebSearch); // [Fix] Add missing button
+            _panelMapToolbar.Controls.Add(btnWebSearch);
             _panelMapToolbar.Controls.Add(btnPan);
             _panelMapToolbar.Controls.Add(btnZoomIn);
             _panelMapToolbar.Controls.Add(btnZoomOut);
@@ -247,15 +244,26 @@ namespace WindowsFormsMap1
             }
         }
 
-        private Button CreateNavButton(string text)
+        private Button CreateNavIconBtn(string iconType, string toolTip)
         {
             Button btn = new Button
             {
-                Text = text,
-                Width = 75,
-                Height = 32
+                Size = new Size(40, 40), // 增大点击区域
+                FlatStyle = FlatStyle.Flat,
+                Image = ThemeEngine.GetIcon(iconType, Color.FromArgb(71, 85, 105)), // 使用中性色图标
+                BackColor = Color.Transparent,
+                Cursor = Cursors.Hand
             };
-            ThemeEngine.ApplyButtonTheme(btn, false);
+            btn.FlatAppearance.BorderSize = 0;
+            btn.FlatAppearance.MouseOverBackColor = ThemeEngine.ColorSecondary;
+
+            ToolTip tt = new ToolTip();
+            tt.SetToolTip(btn, toolTip);
+
+            // 悬停时图标变深
+            btn.MouseEnter += (s, e) => { btn.Image = ThemeEngine.GetIcon(iconType, ThemeEngine.ColorPrimary); };
+            btn.MouseLeave += (s, e) => { btn.Image = ThemeEngine.GetIcon(iconType, Color.FromArgb(71, 85, 105)); };
+
             return btn;
         }
 
@@ -266,16 +274,31 @@ namespace WindowsFormsMap1
         {
             Button btn = new Button();
             btn.Text = text;
-            btn.Size = new System.Drawing.Size(70, 70);
-            btn.Location = new System.Drawing.Point(5, 20 + index * 80);
-            ThemeEngine.ApplyButtonTheme(btn, true); // 侧边栏主操作使用 Primary 样式
-            btn.BackColor = Color.White; // 稍微差异化，保持白色背景
+            btn.Size = new Size(70, 70); // 紧凑方块
+            btn.Location = new System.Drawing.Point(5, 20 + index * 75); // 紧凑间距 (5px 缝隙)
+            btn.TextAlign = ContentAlignment.BottomCenter;
+            btn.TextImageRelation = TextImageRelation.ImageAboveText;
+            btn.Padding = new Padding(0, 0, 0, 4); // 仅留底部微量余白
+            btn.ImageAlign = ContentAlignment.TopCenter;
+
+            // 为侧边栏按钮分配图标
+            string iconType = "Full";
+            if (text == "热力图") iconType = "Heatmap";
+            else if (text == "分类") iconType = "Mapping";
+            else if (text == "地市") iconType = "Query";
+            else if (text == "返回") iconType = "Back";
+            else if (text == "全景") iconType = "Full";
+
+            btn.Image = ThemeEngine.GetIcon(iconType, Color.Black);
+
+            ThemeEngine.ApplyButtonTheme(btn, true);
+            btn.BackColor = Color.White;
             btn.ForeColor = ThemeEngine.ColorText;
             btn.FlatAppearance.BorderSize = 1;
             btn.FlatAppearance.BorderColor = Color.FromArgb(226, 232, 240);
 
-            btn.MouseEnter += (s, e) => { btn.BackColor = ThemeEngine.ColorSecondary; btn.ForeColor = ThemeEngine.ColorPrimary; };
-            btn.MouseLeave += (s, e) => { btn.BackColor = Color.White; btn.ForeColor = ThemeEngine.ColorText; };
+            btn.MouseEnter += (s, e) => { btn.BackColor = ThemeEngine.ColorSecondary; btn.ForeColor = ThemeEngine.ColorPrimary; btn.Image = ThemeEngine.GetIcon(iconType, ThemeEngine.ColorPrimary); };
+            btn.MouseLeave += (s, e) => { btn.BackColor = Color.White; btn.ForeColor = ThemeEngine.ColorText; btn.Image = ThemeEngine.GetIcon(iconType, Color.Black); };
 
             btn.Click += SidebarBtn_Click;
 
@@ -328,6 +351,9 @@ namespace WindowsFormsMap1
                     // [New] 进入时空热力图模式
                     EnterHeatmapMode();
                     break;
+                case "返回":
+                    tabControl1.SelectedIndex = 0;
+                    break;
             }
 
             // 处理时间轴与热力图状态归一化
@@ -336,7 +362,7 @@ namespace WindowsFormsMap1
                 _isHeatmapMode = true;
                 EnterHeatmapMode();
             }
-            else
+            else if (btn.Text != "返回")
             {
                 _isHeatmapMode = false;
                 if (btn.Text == "全景") ResetRenderer();
