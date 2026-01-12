@@ -179,6 +179,9 @@
     <Compile Include="FormBuffer.cs">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Include="FormSmartBuffer.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="FormRoute.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -186,6 +189,9 @@
       <DependentUpon>FormRoute.cs</DependentUpon>
     </Compile>
     <Compile Include="FormOverlay.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="FormQueryResult.cs">
       <SubType>Form</SubType>
     </Compile>
     <Compile Include="AnalysisHelper.cs" />

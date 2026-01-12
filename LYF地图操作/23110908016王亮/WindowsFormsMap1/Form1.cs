@@ -17,6 +17,7 @@ namespace WindowsFormsMap1
     public partial class Form1 : Form
     {
         private FormRoute _routeForm;
+        public FormSmartBuffer SmartBufferForm; // [Member C] Active Buffer Form
 
         // ... existing fields ...
 
@@ -58,7 +59,7 @@ namespace WindowsFormsMap1
         { 
             None, Pan, MeasureDistance, MeasureArea, CreateFeature,
             // [Member C] 新增模式
-            BufferPoint, RouteStart, RouteEnd, QueryBox, QueryPolygon,
+            BufferPoint, BufferLine, RouteStart, RouteEnd, QueryBox, QueryPolygon,
             // [Member C] Multi-point route interaction
             PickRoutePoint
         }
@@ -68,6 +69,7 @@ namespace WindowsFormsMap1
         private bool _isHeatmapMode = false; // [Agent Add] 记录是否处于热力图模式
         private UIHelper _ui;
 
+        public ISpatialReference MapSpatialReference => axMapControl2.SpatialReference; // [Agent Add] 暴露地图空间参考用于投影转换
 
         public Form1()
         {

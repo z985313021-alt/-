@@ -60,6 +60,13 @@ namespace WindowsFormsMap1
             lblInfo.Text = "已清空。";
         }
 
+        private void btnBuildNetwork_Click(object sender, EventArgs e)
+        {
+            // [Agent] 调用主窗体的构建逻辑
+            _mainForm.BuildRoadNetwork();
+            lblInfo.Text = "尝试构建路网...";
+        }
+
         private void btnSolve_Click(object sender, EventArgs e)
         {
             if (_routePoints.Count < 2)
@@ -79,10 +86,34 @@ namespace WindowsFormsMap1
 
                 if (result != null && !result.IsEmpty)
                 {
+                    // [Agent Fix] 单位换算逻辑
+                    double lenKm = 0;
+                    
+                    // 1. 尝试投影到地图坐标系 (通常是投影坐标系/米)
+                    ISpatialReference mapSR = _mainForm.MapSpatialReference;
+                    if (mapSR != null && result.SpatialReference != null)
+                    {
+                        // 如果当前路网是地理坐标系(Results in Degrees) 而地图是投影坐标系(Meters) -> 需要投影
+                        if (mapSR is IProjectedCoordinateSystem && !(result.SpatialReference is IProjectedCoordinateSystem))
+                        {
+                            try { result.Project(mapSR); } catch { }
+                        }
+                    }
+
+                    // 2. 计算长度 (假设投影后单位为米)
+                    // 如果地图本身就是地理坐标系，那没办法，只能显示度，或者强行用 GeodeticLength
+                    // 但根据截图坐标(362890...)，地图肯定是投影坐标系(米)
+                    double lenMeters = result.Length;
+                    
+                    // 3. 换算为公里
+                    lenKm = lenMeters / 1000.0;
+
                     // 绘制结果 (加粗红线)
                     _mainForm.DrawGeometry(result, new RgbColorClass { Red = 255 });
-                    lblInfo.Text = $"规划成功！总长度: {result.Length:F2}";
-                    MessageBox.Show($"规划成功！已在地图显示红色路径。\n若看不见，请检查图层是否开启。\n代码位于: AnalysisHelper.cs", "结果");
+                    
+                    string info = $"规划成功！总长度: {lenKm:F2} km";
+                    lblInfo.Text = info;
+                    MessageBox.Show($"{info}\n已在地图显示红色路径。\n若看不见，请检查图层是否开启。\n代码位于: AnalysisHelper.cs", "结果");
                 }
                 else
                 {
