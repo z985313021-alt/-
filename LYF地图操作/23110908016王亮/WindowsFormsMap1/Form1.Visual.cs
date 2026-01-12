@@ -93,7 +93,8 @@ namespace WindowsFormsMap1
             AddSidebarButton("地市", 1);
             AddSidebarButton("分类", 2);
             AddSidebarButton("热力图", 3);
-            AddSidebarButton("返回", 4); // 紧跟在后面
+            AddSidebarButton("游览", 4); // [Agent] 新增：推荐游览路线
+            AddSidebarButton("返回", 5); // 顺延
 
             _splitContainerVisual = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Horizontal, BorderStyle = BorderStyle.FixedSingle };
             _splitContainerVisual.SplitterDistance = (int)(tabPageVisual.Height * 0.7);
@@ -286,6 +287,7 @@ namespace WindowsFormsMap1
             if (text == "热力图") iconType = "Heatmap";
             else if (text == "分类") iconType = "Mapping";
             else if (text == "地市") iconType = "Query";
+            else if (text == "游览") iconType = "Navigation"; // 复用 Navigation 图标
             else if (text == "返回") iconType = "Back";
             else if (text == "全景") iconType = "Full";
 
@@ -304,6 +306,8 @@ namespace WindowsFormsMap1
 
             _panelSidebar.Controls.Add(btn);
         }
+
+        private FormTourRoutes _tourRoutesForm; // [Agent Add]
 
         /// <summary>
         /// [Member E] 新增：侧边栏导航路由逻辑
@@ -351,6 +355,10 @@ namespace WindowsFormsMap1
                     // [New] 进入时空热力图模式
                     EnterHeatmapMode();
                     break;
+                case "游览":
+                    // [Agent Add] 推荐游览路线
+                    ShowTourRoutes();
+                    break;
                 case "返回":
                     tabControl1.SelectedIndex = 0;
                     break;
@@ -372,6 +380,213 @@ namespace WindowsFormsMap1
             FilterMapByYear(_dashboardYear);
 
             axMapControlVisual.ActiveView.Refresh();
+        }
+
+        // [Agent Add] 显示游览路线窗口
+        private void ShowTourRoutes()
+        {
+            try
+            {
+                this.Cursor = Cursors.WaitCursor;
+                
+                // 1. 查找关键图层
+                IFeatureLayer ichLayer = null;
+                IFeatureLayer roadLayer = null;
+
+                for (int i = 0; i < axMapControlVisual.LayerCount; i++)
+                {
+                    ILayer l = axMapControlVisual.get_Layer(i);
+                    if (l is IFeatureLayer fl)
+                    {
+                        if (fl.Name.Contains("非遗") || fl.Name.Contains("项目")) ichLayer = fl;
+                        // [Updated] 支持用户新的 "融合" 图层
+                        if (fl.Name.Contains("高速") || fl.Name.Contains("路") || fl.Name.Contains("融合") || fl.Name.Contains("Union")) roadLayer = fl;
+                    }
+                }
+
+                // 2. 生成路线
+                var routes = AnalysisHelper.GenerateRecommendedRoutes(ichLayer, roadLayer);
+
+                this.Cursor = Cursors.Default;
+
+                // 3. 展示窗口
+                if (_tourRoutesForm == null || _tourRoutesForm.IsDisposed)
+                {
+                    _tourRoutesForm = new FormTourRoutes(this, routes);
+                }
+                _tourRoutesForm.Show();
+                _tourRoutesForm.Activate();
+            }
+            catch (Exception ex)
+            {
+                this.Cursor = Cursors.Default;
+                MessageBox.Show("生成路线失败: " + ex.Message);
+            }
+        }
+
+        // [Agent Add] 在地图上展示特定路线 (由 FormTourRoutes 调用)
+        public void DisplayTourRoute(AnalysisHelper.TourRoute route)
+        {
+            if (route == null) return;
+
+            axMapControlVisual.Map.ClearSelection();
+            axMapControlVisual.ActiveView.GraphicsContainer.DeleteAllElements();
+
+            // 1. 高亮路线点
+            IFeatureLayer ichLayer = null;
+            
+            // 尝试根据点位数据的来源类查找图层 (更准确)
+            if (route.Points != null && route.Points.Count > 0)
+            {
+                IFeatureClass ptClass = route.Points[0].Class as IFeatureClass;
+                for (int i = 0; i < axMapControlVisual.LayerCount; i++)
+                {
+                    ILayer l = axMapControlVisual.get_Layer(i);
+                    if (l is IFeatureLayer fl && fl.FeatureClass != null && fl.FeatureClass == ptClass)
+                    {
+                        ichLayer = fl;
+                        break;
+                    }
+                }
+            }
+
+            // 如果没找到 (或者没点)，回退到按名字找
+            if (ichLayer == null)
+            {
+                for (int i = 0; i < axMapControlVisual.LayerCount; i++)
+                {
+                    ILayer l = axMapControlVisual.get_Layer(i);
+                    if (l.Name.Contains("非遗") || l.Name.Contains("项目")) 
+                    {
+                        ichLayer = l as IFeatureLayer;
+                        break; 
+                    }
+                }
+            }
+
+            if (ichLayer != null && route.Points != null && route.Points.Count > 0)
+            {
+                IGeoFeatureLayer gfl = ichLayer as IGeoFeatureLayer;
+                if (gfl != null)
+                {
+                    // 构造选择集 (使用 Add 而非 SelectFeatures，避免 SQL 长度限制导致的 crash)
+                    IFeatureSelection fs = gfl as IFeatureSelection;
+                    fs.Clear();
+                    ISelectionSet selSet = fs.SelectionSet;
+                    
+                    foreach(var pt in route.Points)
+                    {
+                        selSet.Add(pt.OID);
+                    }
+                    
+                    // 注意：不需要调用 SelectFeatures，直接操作 SelectionSet 即可
+                    // 视图刷新在方法最后统一处理
+                }
+            }
+
+            // 1.5 高亮高速路线 (新增需求)
+            if (route.RoadFeatures != null && route.RoadFeatures.Count > 0)
+            {
+                // 查找高速图层 (简单遍历)
+                IFeatureLayer roadLayer = null;
+                for (int i = 0; i < axMapControlVisual.LayerCount; i++)
+                {
+                    ILayer l = axMapControlVisual.get_Layer(i);
+                    // 假设高速图层名字包含 "高速" 或 "Line" 且包含 route.RoadFeatures[0] 所在的 FeatureClass
+                    if (l is IFeatureLayer fl && fl.FeatureClass != null && 
+                        fl.FeatureClass.AliasName == route.RoadFeatures[0].Class.AliasName)
+                    {
+                        roadLayer = fl;
+                        break;
+                    }
+                }
+                
+                // 如果找不到精确匹配，尝试按名字找
+                if (roadLayer == null)
+                {
+                     for (int i = 0; i < axMapControlVisual.LayerCount; i++)
+                     {
+                         ILayer l = axMapControlVisual.get_Layer(i);
+                         if (l.Name.Contains("高速") && l is IFeatureLayer) { roadLayer = l as IFeatureLayer; break; }
+                     }
+                }
+
+                if (roadLayer != null)
+                {
+                    List<int> roadOids = new List<int>();
+                    foreach(var f in route.RoadFeatures) roadOids.Add(f.OID);
+                    
+                    if (roadOids.Count > 0)
+                    {
+                        IFeatureSelection fs = roadLayer as IFeatureSelection;
+                        // 先清空当前选择
+                        fs.Clear();
+                        
+                        // 批量添加到选择集 (使用循环确保稳定性，避免 WHERE 语句超长)
+                        ISelectionSet selSet = fs.SelectionSet;
+                        foreach (int oid in roadOids)
+                        {
+                            selSet.Add(oid);
+                        }
+                        
+                        // 刷新视图以显示选择
+                        // The partial refresh happens at end of method
+                    }
+                }
+            }
+
+            // 2. 绘制连线 (示意性)
+            // 如果 route.PathLine 为空，我们可以简单地按顺序连接点
+            IGeometry lineGeo = route.PathLine;
+            if ((lineGeo == null || lineGeo.IsEmpty) && route.Points.Count > 1)
+            {
+                IPointCollection pc = new PolylineClass();
+                foreach(var pt in route.Points)
+                {
+                   pc.AddPoint(pt.ShapeCopy as IPoint);
+                }
+                lineGeo = pc as IGeometry;
+            }
+
+            if (lineGeo != null && !lineGeo.IsEmpty)
+            {
+                 // 简单绘制
+                 SimpleLineSymbolClass lineSym = new SimpleLineSymbolClass();
+                 lineSym.Color = new RgbColorClass{ Red=255, Green=100, Blue=0 };
+                 lineSym.Width = 3;
+                 lineSym.Style = esriSimpleLineStyle.esriSLSDash;
+
+                 LineElementClass le = new LineElementClass { Geometry = lineGeo, Symbol = lineSym };
+                 axMapControlVisual.ActiveView.GraphicsContainer.AddElement(le, 0);
+            }
+
+            // 3. 缩放到范围
+            // 3. 缩放到范围
+            if (ichLayer != null && (ichLayer as IFeatureSelection).SelectionSet.Count > 0)
+            {
+                // 3. 缩放到范围
+                ISelectionSet selectionSet = (ichLayer as IFeatureSelection).SelectionSet;
+                ICursor cursor;
+                selectionSet.Search(null, false, out cursor);
+                IFeatureCursor featureCursor = cursor as IFeatureCursor;
+
+                IFeature f;
+                IEnvelope env = new EnvelopeClass { SpatialReference = axMapControlVisual.Map.SpatialReference };
+                bool first = true;
+                while((f = featureCursor.NextFeature())!=null)
+                {
+                    if (first) { env = f.Extent; first = false; }
+                    else env.Union(f.Extent);
+                }
+                System.Runtime.InteropServices.Marshal.ReleaseComObject(featureCursor);
+                System.Runtime.InteropServices.Marshal.ReleaseComObject(cursor);
+
+                env.Expand(1.2, 1.2, true);
+                axMapControlVisual.Extent = env;
+            }
+
+            axMapControlVisual.ActiveView.PartialRefresh(esriViewDrawPhase.esriViewGraphics, null, null);
+            axMapControlVisual.ActiveView.PartialRefresh(esriViewDrawPhase.esriViewGeoSelection, null, null);
         }
 
         // [Member E] Modified: 修复同步逻辑，确保地图图层正确复制且不发生冲突
