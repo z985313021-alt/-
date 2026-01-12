@@ -6,6 +6,7 @@ using ESRI.ArcGIS.Geometry;
 using ESRI.ArcGIS.Display;
 using ESRI.ArcGIS.esriSystem;
 using System;
+using System.Drawing;
 using System.Collections.Generic;
 using System.Windows.Forms;
 
@@ -27,12 +28,14 @@ namespace WindowsFormsMap1
         {
             // [Modified] 用户要求显示为 "智能工具箱" 且放在显著位置
             ToolStripMenuItem smartMenu = new ToolStripMenuItem("智能工具箱");
+            smartMenu.Image = ThemeEngine.GetIcon("Toolbox", Color.Black);
+            smartMenu.TextImageRelation = TextImageRelation.ImageAboveText;
 
             // 1. 路径规划
             ToolStripMenuItem routeItem = new ToolStripMenuItem("路径规划");
             routeItem.DropDownItems.Add("构建路网 (必需)", null, (s, e) => { BuildRoadNetwork(); });
-            routeItem.DropDownItems.Add("打开规划面板", null, (s, e) => 
-            { 
+            routeItem.DropDownItems.Add("打开规划面板", null, (s, e) =>
+            {
                 if (_routeForm == null || _routeForm.IsDisposed)
                 {
                     _routeForm = new FormRoute(this, _analysisHelper);
@@ -111,11 +114,11 @@ namespace WindowsFormsMap1
                 IRgbColor color = new RgbColorClass { Blue = 255 };
                 color.Transparency = 100;
                 DrawGeometry(bufGeo, color);
-                
+
                 // 询问是否查询包含的要素
                 if (MessageBox.Show("是否查询缓冲区内的要素？", "查询", MessageBoxButtons.YesNo) == DialogResult.Yes)
                 {
-                     PerformSpatialQuery(bufGeo);
+                    PerformSpatialQuery(bufGeo);
                 }
             }
         }
@@ -178,7 +181,7 @@ namespace WindowsFormsMap1
                 axMapControl2.ActiveView.PartialRefresh(esriViewDrawPhase.esriViewGeography, null, null);
                 axMapControl2.ActiveView.PartialRefresh(esriViewDrawPhase.esriViewGraphics, null, null);
             }
-        }        
+        }
 
         // ================= 数据加载逻辑 =================
 
