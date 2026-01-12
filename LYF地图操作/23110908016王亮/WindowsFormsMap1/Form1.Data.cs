@@ -15,6 +15,7 @@ namespace WindowsFormsMap1
 
         public void InitDataModule()
         {
+            // [Member D] 数据导入功能已移除 (任务完成)
         }
 
         /// <summary>
@@ -117,7 +118,11 @@ namespace WindowsFormsMap1
                         IFeatureLayerDefinition layerDef = heritageLayer as IFeatureLayerDefinition;
                         if (layerDef != null) layerDef.DefinitionExpression = sqlFilter;
 
-                        mapControl.ActiveView.PartialRefresh(esriViewDrawPhase.esriViewGeography, null, null);
+                        // [Optimization] 仅当控件可见时才刷新，避免后台无意义的渲染消耗
+                        if (mapControl.Visible && mapControl.Parent != null && mapControl.Parent.Visible)
+                        {
+                            mapControl.ActiveView.PartialRefresh(esriViewDrawPhase.esriViewGeography, null, null);
+                        }
                     }
                 }
             }

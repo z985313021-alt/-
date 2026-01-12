@@ -86,76 +86,87 @@ namespace WindowsFormsMap1
         {
             if (_isVisualLayoutInitialized) return;
 
-            // 1. 结构化容器
-            _panelMainContent = new Panel { Dock = DockStyle.Fill, BackColor = System.Drawing.Color.AliceBlue };
-            _panelSidebar = new Panel { Width = 80, Dock = DockStyle.Left, BackColor = Color.White, Padding = new Padding(5, 20, 5, 5) };
-            AddSidebarButton("全景", 0);
-            AddSidebarButton("地市", 1);
-            AddSidebarButton("分类", 2);
-            AddSidebarButton("热力图", 3);
-            AddSidebarButton("返回", 4); // 紧跟在后面
-
-            _splitContainerVisual = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Horizontal, BorderStyle = BorderStyle.FixedSingle };
-            _splitContainerVisual.SplitterDistance = (int)(tabPageVisual.Height * 0.7);
-
-            // 2. 地图内容区
-            Panel mapContainer = new Panel { Dock = DockStyle.Fill };
-            _panelMapToolbar = new Panel { Height = 45, Dock = DockStyle.Top, BackColor = Color.White, Padding = new Padding(5) };
-            AddMapNavigationButtons();
-
-            axMapControlVisual.Parent = null;
-            axMapControlVisual.Dock = DockStyle.Fill;
-
-            // [Fix] Add toolbar first to ensure it takes the Top dock space correctly, 
-            // then map fills the rest. Or explicitly use BringToFront.
-            mapContainer.Controls.Add(_panelMapToolbar);
-            mapContainer.Controls.Add(axMapControlVisual);
-            _panelMapToolbar.BringToFront(); // Double insurance
-
-            _splitContainerVisual.Panel1.Controls.Add(mapContainer);
-
-            // 3. 看板集成
-            if (_dashboardForm == null || _dashboardForm.IsDisposed)
+            // [Optimization] 挂起布局逻辑，防止界面闪烁
+            this.SuspendLayout();
+            try
             {
-                _dashboardForm = new FormChart();
-                _dashboardForm.SetMainForm(this);
+                // 1. 结构化容器
+                _panelMainContent = new Panel { Dock = DockStyle.Fill, BackColor = System.Drawing.Color.AliceBlue };
+                _panelSidebar = new Panel { Width = 80, Dock = DockStyle.Left, BackColor = Color.White, Padding = new Padding(5, 20, 5, 5) };
+                AddSidebarButton("全景", 0);
+                AddSidebarButton("地市", 1);
+                AddSidebarButton("分类", 2);
+                AddSidebarButton("热力图", 3);
+                AddSidebarButton("WEB", 4); // [Member E] Added: Entry for Web Mode
+                AddSidebarButton("返回", 5); // 紧跟在后面
+
+                _splitContainerVisual = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Horizontal, BorderStyle = BorderStyle.FixedSingle };
+                _splitContainerVisual.SplitterDistance = (int)(tabPageVisual.Height * 0.7);
+
+                // 2. 地图内容区
+                Panel mapContainer = new Panel { Dock = DockStyle.Fill };
+                _panelMapToolbar = new Panel { Height = 45, Dock = DockStyle.Top, BackColor = Color.White, Padding = new Padding(5) };
+                AddMapNavigationButtons();
+
+                axMapControlVisual.Parent = null;
+                axMapControlVisual.Dock = DockStyle.Fill;
+
+                // [Fix] Add toolbar first to ensure it takes the Top dock space correctly, 
+                // then map fills the rest. Or explicitly use BringToFront.
+                mapContainer.Controls.Add(_panelMapToolbar);
+                mapContainer.Controls.Add(axMapControlVisual);
+                _panelMapToolbar.BringToFront(); // Double insurance
+
+                _splitContainerVisual.Panel1.Controls.Add(mapContainer);
+
+                // 3. 看板集成
+                if (_dashboardForm == null || _dashboardForm.IsDisposed)
+                {
+                    _dashboardForm = new FormChart();
+                    _dashboardForm.SetMainForm(this);
+                }
+                // [Fix] 每次初始化布局都重新绑定当前地图控件（处理演示/专业模式切换）
+                _dashboardForm.SetMapControl(axMapControlVisual);
+
+                _dashboardForm.TopLevel = false;
+                _dashboardForm.FormBorderStyle = FormBorderStyle.None;
+                _dashboardForm.Dock = DockStyle.Fill;
+                _dashboardForm.Visible = true;
+                _splitContainerVisual.Panel2.Controls.Add(_dashboardForm);
+
+                // 4. 安全组装 (修复：Controls.Clear() 会删掉 EagleEye)
+                _panelMainContent.Controls.Add(_splitContainerVisual);
+
+                // [Member B] Added: 绑定地图事件监听器，实现全自动图表联动
+                axMapControlVisual.OnMapReplaced += (s, ev) =>
+                {
+                    if (_dashboardForm != null && !_dashboardForm.IsDisposed)
+                        _dashboardForm.UpdateChartData(_dashboardYear); // 定义一个字段记录当前年份
+                };
+
+                // 备份鹰眼面板
+                Control eagleBackup = null;
+                if (_panelEagleVisual != null && tabPageVisual.Controls.Contains(_panelEagleVisual))
+                    eagleBackup = _panelEagleVisual;
+
+                tabPageVisual.Controls.Clear();
+                tabPageVisual.Controls.Add(_panelMainContent);
+                tabPageVisual.Controls.Add(_panelSidebar);
+
+                // 还原鹰眼并置顶
+                if (eagleBackup != null)
+                {
+                    tabPageVisual.Controls.Add(eagleBackup);
+                    eagleBackup.BringToFront();
+                }
+
+                _isVisualLayoutInitialized = true;
             }
-            // [Fix] 每次初始化布局都重新绑定当前地图控件（处理演示/专业模式切换）
-            _dashboardForm.SetMapControl(axMapControlVisual);
-
-            _dashboardForm.TopLevel = false;
-            _dashboardForm.FormBorderStyle = FormBorderStyle.None;
-            _dashboardForm.Dock = DockStyle.Fill;
-            _dashboardForm.Visible = true;
-            _splitContainerVisual.Panel2.Controls.Add(_dashboardForm);
-
-            // 4. 安全组装 (修复：Controls.Clear() 会删掉 EagleEye)
-            _panelMainContent.Controls.Add(_splitContainerVisual);
-
-            // [Member B] Added: 绑定地图事件监听器，实现全自动图表联动
-            axMapControlVisual.OnMapReplaced += (s, ev) =>
+            finally
             {
-                if (_dashboardForm != null && !_dashboardForm.IsDisposed)
-                    _dashboardForm.UpdateChartData(_dashboardYear); // 定义一个字段记录当前年份
-            };
-
-            // 备份鹰眼面板
-            Control eagleBackup = null;
-            if (_panelEagleVisual != null && tabPageVisual.Controls.Contains(_panelEagleVisual))
-                eagleBackup = _panelEagleVisual;
-
-            tabPageVisual.Controls.Clear();
-            tabPageVisual.Controls.Add(_panelMainContent);
-            tabPageVisual.Controls.Add(_panelSidebar);
-
-            // 还原鹰眼并置顶
-            if (eagleBackup != null)
-            {
-                tabPageVisual.Controls.Add(eagleBackup);
-                eagleBackup.BringToFront();
+                // [Optimization] 恢复布局逻辑
+                this.ResumeLayout(true);
             }
-
-            _isVisualLayoutInitialized = true;
         }
 
         // [Member E] 新增：演示模式集成导航工具
@@ -288,6 +299,7 @@ namespace WindowsFormsMap1
             else if (text == "地市") iconType = "Query";
             else if (text == "返回") iconType = "Back";
             else if (text == "全景") iconType = "Full";
+            else if (text == "WEB") iconType = "Web"; // [Member E] Added: Web icon mapping
 
             btn.Image = ThemeEngine.GetIcon(iconType, Color.Black);
 
@@ -353,6 +365,9 @@ namespace WindowsFormsMap1
                     break;
                 case "返回":
                     tabControl1.SelectedIndex = 0;
+                    break;
+                case "WEB":
+                    OpenWebVisualMode();
                     break;
             }
 
@@ -793,6 +808,20 @@ namespace WindowsFormsMap1
         {
             axMapControlVisual.Extent = axMapControlVisual.FullExtent;
             axMapControlVisual.ActiveView.Refresh();
+        }
+
+        // [Member E] Added: Open independent Web Visualization Window
+        private void OpenWebVisualMode()
+        {
+            try
+            {
+                FormWebVisual webForm = new FormWebVisual();
+                webForm.Show();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("启动Web演示模式失败: " + ex.Message + "\n请确认WebView2环境已就绪。", "系统提示");
+            }
         }
 
         private void BtnVisualSync_Click(object sender, EventArgs e)

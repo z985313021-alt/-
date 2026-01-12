@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>山东非遗数据可视化</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/cards.css">
+</head>
+
+<body>
+    <!-- 粒子动画背景 -->
+    <div class="particle-bg">
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+    </div>
+
+    <header>
+        <h1>山东非遗可视化系统 <span class="version">v2.0 WEB</span></h1>
+        <div class="header-stats">
+            总收录项目: <span id="total-count">0</span>
+        </div>
+    </header>
+
+    <div class="main-container">
+        <!-- Left Sidebar: Functions -->
+        <aside class="sidebar left-sidebar" id="function-sidebar">
+            <div class="panel-header">
+                <i class="icon-func"></i> 功能导航
+            </div>
+            <div class="nav-menu">
+                <div class="nav-item active" data-view="overview">
+                    <span class="nav-icon">📊</span>
+                    <span class="nav-label">数据概览</span>
+                </div>
+                <div class="nav-item" data-view="distribution">
+                    <span class="nav-icon">🗺️</span>
+                    <span class="nav-label">分布分析</span>
+                </div>
+                <div class="nav-item" data-view="category">
+                    <span class="nav-icon">🏷️</span>
+                    <span class="nav-label">类别统计</span>
+                </div>
+                <div class="nav-item" data-view="search">
+                    <span class="nav-icon">🔍</span>
+                    <span class="nav-label">精准搜索</span>
+                </div>
+            </div>
+
+            <div class="city-stats-panel">
+                <div class="sub-header">地市分布回顾</div>
+                <div id="city-list" class="stats-list">
+                    <!-- Dynamic city stats -->
+                </div>
+            </div>
+        </aside>
+
+        <!-- Central Module: Map + Card Overlay -->
+        <main class="content-area" id="center-stage">
+            <div id="map-container">
+                <div id="visual-map"></div>
+
+                <!-- Map Controls -->
+                <div class="map-overlay">
+                    <div class="map-controls">
+                        <button class="map-btn" id="btn-zoom-in" title="放大">+</button>
+                        <button class="map-btn" id="btn-zoom-out" title="缩小">-</button>
+                        <button class="map-btn" id="btn-reset" title="复位">⌂</button>
+                    </div>
+                </div>
+
+                <!-- Card Display Overlay (NEW) -->
+                <div class="card-overlay" id="card-overlay" style="display: none;">
+                    <button class="card-close-btn" id="btn-close-cards">✕</button>
+                    <div class="card-container" id="card-container">
+                        <!-- Single card or deck of cards will be inserted here -->
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Right Sidebar: Charts & Statistics -->
+        <aside class="sidebar right-sidebar" id="analysis-sidebar">
+            <div class="panel-header">
+                📊 数据统计分析
+            </div>
+            <div class="detail-content">
+                <!-- Category Pie Chart -->
+                <div id="category-chart" class="chart-box"></div>
+
+                <!-- Keep old detail elements hidden but functional for JS compatibility -->
+                <div id="detail-card" class="info-card" style="display: none;">
+                    <h3 id="detail-title">项目名称</h3>
+                    <p class="tag" id="detail-cat">类别</p>
+                    <p class="desc" id="detail-city">地市</p>
+                    <div class="action-panel" style="margin-top: 15px;">
+                        <button id="btn-like" class="btn-like">❤️ 点赞 (<span id="like-count">0</span>)</button>
+                        <div class="comment-box" style="margin-top: 10px; display: flex; gap: 5px;">
+                            <input type="text" id="input-comment" placeholder="写下你的想法...">
+                            <button id="btn-comment">发送</button>
+                        </div>
+                        <div id="comment-list"></div>
+                    </div>
+                </div>
+
+                <!-- System Info -->
+                <div class="info-card" id="detail-placeholder">
+                    <h3>💡 使用提示</h3>
+                    <div style="font-size: 13px; color: rgba(255,255,255,0.7); line-height: 1.8; margin-top: 10px;">
+                        • 点击<strong style="color: #00d2ff;">非遗点位</strong>查看详细信息<br>
+                        • 点击<strong style="color: #667eea;">城市区域</strong>浏览该市所有项目
+                    </div>
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <!-- ECharts Library (CDN) -->
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+
+    <script src="js/main.js"></script>
+</body>
+
+</html>

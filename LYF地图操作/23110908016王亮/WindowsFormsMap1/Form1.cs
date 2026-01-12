@@ -111,6 +111,8 @@ namespace WindowsFormsMap1
 
             // [Member C] 初始化智能工具菜单 (优先加载)
             this.InitSmartTools();
+            // [Member D] 初始化数据模块
+            // [Member D] Data Init removed (任务完成)
 
             // 3. 使用异步调用确保 Handle 创建后再执行复杂 UI 同步
             this.BeginInvoke(new Action(() =>

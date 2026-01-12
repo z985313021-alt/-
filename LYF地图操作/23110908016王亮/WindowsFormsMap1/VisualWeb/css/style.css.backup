@@ -1,0 +1,527 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap');
+
+:root {
+    /* 渐变主题色 */
+    --bg-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    --glass-bg: rgba(255, 255, 255, 0.08);
+    --glass-border: rgba(255, 255, 255, 0.15);
+    --glass-highlight: rgba(255, 255, 255, 0.1);
+    --text-main: #ffffff;
+    --text-muted: rgba(255, 255, 255, 0.7);
+    --accent-color: #00d2ff;
+    --accent-blue: #3b82f6;
+    --accent-purple: #8b5cf6;
+    --accent-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    --card-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    -webkit-font-smoothing: antialiased;
+}
+
+body {
+    font-family: 'Outfit', 'PingFang SC', sans-serif;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    color: var(--text-main);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+}
+
+/* 粒子光点背景 - 轻量级优化版 */
+.particle-bg {
+    position: fixed;
+    width: 100%;
+    height: 100%;
+    top: 0;
+    left: 0;
+    z-index: 1;
+    pointer-events: none;
+}
+
+.particle {
+    position: absolute;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.9);
+    box-shadow: 0 0 10px rgba(255, 255, 255, 1), 0 0 20px rgba(102, 126, 234, 0.8);
+    animation: sparkle 3s infinite ease-in-out;
+}
+
+/* 生成多个小光点，分散布局 */
+.particle:nth-child(1) {
+    width: 3px;
+    height: 3px;
+    top: 10%;
+    left: 15%;
+    animation-duration: 4s;
+    animation-delay: 0s;
+}
+
+.particle:nth-child(2) {
+    width: 2px;
+    height: 2px;
+    top: 25%;
+    left: 72%;
+    animation-duration: 5s;
+    animation-delay: 1s;
+}
+
+.particle:nth-child(3) {
+    width: 4px;
+    height: 4px;
+    top: 60%;
+    left: 20%;
+    animation-duration: 3.5s;
+    animation-delay: 1.5s;
+}
+
+.particle:nth-child(4) {
+    width: 3px;
+    height: 3px;
+    top: 45%;
+    left: 85%;
+    animation-duration: 4.5s;
+    animation-delay: 0.5s;
+}
+
+.particle:nth-child(5) {
+    width: 2px;
+    height: 2px;
+    top: 80%;
+    left: 50%;
+    animation-duration: 5.5s;
+    animation-delay: 2s;
+}
+
+.particle:nth-child(6) {
+    width: 3px;
+    height: 3px;
+    top: 35%;
+    left: 40%;
+    animation-duration: 4s;
+    animation-delay: 2.5s;
+}
+
+.particle:nth-child(7) {
+    width: 4px;
+    height: 4px;
+    top: 15%;
+    left: 60%;
+    animation-duration: 3s;
+    animation-delay: 0.8s;
+}
+
+.particle:nth-child(8) {
+    width: 2px;
+    height: 2px;
+    top: 70%;
+    left: 90%;
+    animation-duration: 5s;
+    animation-delay: 1.8s;
+}
+
+/* 闪烁动画 - 更轻量 */
+@keyframes sparkle {
+
+    0%,
+    100% {
+        opacity: 0.3;
+        transform: scale(1);
+    }
+
+    50% {
+        opacity: 1;
+        transform: scale(1.5);
+    }
+}
+
+/* Header */
+header {
+    height: 70px;
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 30px;
+    border-bottom: 1px solid var(--glass-border);
+    z-index: 100;
+    position: relative;
+}
+
+header h1 {
+    font-size: 24px;
+    font-weight: 700;
+    background: linear-gradient(135deg, #fff 0%, #a5b4fc 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    letter-spacing: 1px;
+}
+
+header .version {
+    background: rgba(255, 255, 255, 0.15);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    -webkit-text-fill-color: white;
+    margin-left: 10px;
+}
+
+.header-stats {
+    background: rgba(0, 0, 0, 0.2);
+    padding: 8px 20px;
+    border-radius: 20px;
+    border: 1px solid var(--glass-border);
+    font-size: 14px;
+}
+
+#total-count {
+    color: var(--accent-color);
+    font-weight: 700;
+    font-size: 18px;
+    margin-left: 5px;
+}
+
+/* Layout */
+.main-container {
+    flex: 1;
+    display: flex;
+    padding: 20px;
+    gap: 20px;
+    position: relative;
+    z-index: 1;
+}
+
+/* Glass Panels */
+.sidebar,
+.content-area {
+    background: var(--glass-bg);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-radius: 20px;
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--card-shadow);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.sidebar {
+    width: 280px;
+}
+
+.left-sidebar {
+    width: 260px;
+}
+
+.right-sidebar {
+    width: 320px;
+}
+
+.content-area {
+    flex: 1;
+    position: relative;
+}
+
+/* Navigation */
+.panel-header {
+    padding: 20px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--accent-color);
+    letter-spacing: 1px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.nav-menu {
+    padding: 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.nav-item {
+    padding: 12px 15px;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--text-muted);
+}
+
+.nav-item:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    transform: translateX(5px);
+}
+
+.nav-item.active {
+    background: var(--accent-gradient);
+    color: white;
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+}
+
+.nav-icon {
+    font-size: 18px;
+}
+
+/* Map Canvas */
+#map-container,
+#visual-map {
+    width: 100%;
+    height: 100%;
+}
+
+/* Map Controls */
+.map-overlay {
+    position: absolute;
+    bottom: 30px;
+    right: 30px;
+    z-index: 10;
+}
+
+.map-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.map-btn {
+    width: 40px;
+    height: 40px;
+    background: rgba(255, 255, 255, 0.15);
+    border: 1px solid var(--glass-border);
+    border-radius: 10px;
+    color: white;
+    font-size: 20px;
+    cursor: pointer;
+    backdrop-filter: blur(4px);
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.map-btn:hover {
+    background: var(--accent-color);
+    color: #000;
+    transform: scale(1.1);
+    box-shadow: 0 4px 15px rgba(0, 210, 255, 0.4);
+}
+
+/* Statistics */
+.city-stats-panel {
+    margin-top: auto;
+    padding: 20px;
+    background: rgba(0, 0, 0, 0.15);
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.sub-header {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 16px;
+    letter-spacing: 1px;
+}
+
+.stats-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.stats-item {
+    background: rgba(255, 255, 255, 0.08);
+    padding: 12px;
+    border-radius: 10px;
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    border: 1px solid transparent;
+    transition: all 0.3s;
+}
+
+.stats-item:hover {
+    border-color: var(--accent-color);
+    background: rgba(0, 210, 255, 0.1);
+    transform: translateX(5px);
+}
+
+.stats-item span:last-child {
+    color: var(--accent-blue);
+    font-weight: 600;
+}
+
+/* Detail Card */
+.detail-content {
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    overflow-y: auto;
+}
+
+.chart-box {
+    height: 250px;
+    width: 100%;
+}
+
+.info-card {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 20px;
+    border-radius: 16px;
+    border: 1px solid var(--glass-border);
+    animation: slideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.info-card h3 {
+    color: white;
+    margin-bottom: 10px;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.tag {
+    background: rgba(0, 210, 255, 0.2);
+    color: #00d2ff;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+/* 美化点赞和评论按钮 */
+.btn-like {
+    background: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%);
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 25px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px rgba(255, 107, 107, 0.3);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn-like:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(255, 107, 107, 0.5);
+}
+
+.btn-like:active {
+    transform: translateY(0);
+}
+
+.comment-box {
+    display: flex;
+    gap: 10px;
+    margin-top: 15px;
+}
+
+#input-comment {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid var(--glass-border);
+    border-radius: 20px;
+    padding: 10px 15px;
+    color: white;
+    font-size: 14px;
+    outline: none;
+    transition: all 0.3s;
+}
+
+#input-comment:focus {
+    border-color: var(--accent-blue);
+    background: rgba(255, 255, 255, 0.15);
+}
+
+#btn-comment {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 20px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+}
+
+#btn-comment:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+}
+
+#comment-list {
+    margin-top: 15px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.comment-list div {
+    background: rgba(255, 255, 255, 0.05);
+    padding: 10px;
+    border-radius: 8px;
+    margin-bottom: 8px;
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+.placeholder-text {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 14px;
+    margin-top: 40px;
+    line-height: 1.6;
+}
+
+/* Scrollbar Styling */
+::-webkit-scrollbar {
+    width: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
