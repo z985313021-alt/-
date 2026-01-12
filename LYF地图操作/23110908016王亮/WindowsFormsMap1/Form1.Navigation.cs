@@ -54,7 +54,17 @@ namespace WindowsFormsMap1
                     break;
                 // [Member C] 智能工具箱交互
                 case MapToolMode.BufferPoint:
-                    ExecutePointBuffer(e.x, e.y);
+                    {
+                        // [Modified] New Interactive Workflow
+                        IPoint bufferPt = axMapControl2.ActiveView.ScreenDisplay.DisplayTransformation.ToMapPoint(e.x, e.y);
+                        if (SmartBufferForm != null && !SmartBufferForm.IsDisposed) SmartBufferForm.OnGeometryCaptured(bufferPt);
+                        else ExecutePointBuffer(e.x, e.y); // Fallback
+                    }
+                    break;
+                case MapToolMode.BufferLine:
+                    IGeometry lineGeo = axMapControl2.TrackLine();
+                    if (SmartBufferForm != null && !SmartBufferForm.IsDisposed) SmartBufferForm.OnGeometryCaptured(lineGeo);
+                    else ExecuteLineBuffer(lineGeo); // Fallback
                     break;
                 case MapToolMode.PickRoutePoint:
                     IPoint pt = axMapControl2.ActiveView.ScreenDisplay.DisplayTransformation.ToMapPoint(e.x, e.y);

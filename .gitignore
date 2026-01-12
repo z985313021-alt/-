@@ -1,0 +1,16 @@
+# Build artifacts
+bin/
+obj/
+*.exe
+*.pdb
+*.suo
+*.user
+*.cache
+*.FileListAbsolute.txt
+
+# GIS cache files
+*.netcache
+NetworkCache/
+
+# User specific
+.vs/

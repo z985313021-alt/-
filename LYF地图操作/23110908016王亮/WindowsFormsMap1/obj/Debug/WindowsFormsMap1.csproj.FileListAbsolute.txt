@@ -165,3 +165,4 @@ C:\Users\29525\Desktop\地理信息系统开发实习\1.8\-\LYF地图操作\2311
 C:\Users\29525\Desktop\地理信息系统开发实习\1.8\-\LYF地图操作\23110908016王亮\WindowsFormsMap1\bin\Debug\ESRI.ArcGIS.GeoAnalyst.xml
 C:\Users\29525\Desktop\地理信息系统开发实习\1.8\-\LYF地图操作\23110908016王亮\WindowsFormsMap1\obj\Debug\WindowsFormsMap1.csproj.CopyComplete
 C:\Users\29525\Desktop\地理信息系统开发实习\1.8\-\LYF地图操作\23110908016王亮\WindowsFormsMap1\obj\Debug\WindowsFormsMap1.FormRoute.resources
+C:\Users\Administrator\Desktop\团队项目\-\LYF地图操作\23110908016王亮\WindowsFormsMap1\obj\Debug\WindowsFormsMap1.FormRoute.resources

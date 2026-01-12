@@ -233,5 +233,168 @@ namespace WindowsFormsMap1
                 return 0;
             }
         }
+        /// <summary>
+        /// 将几何体导出为 Shapefile (用于缓冲区导出)
+        /// </summary>
+        public static void ExportGeometryToShapefile(List<IGeometry> geometries, string filePath)
+        {
+            if (geometries == null || geometries.Count == 0) throw new Exception("没有几何体可导出");
+            
+            // 1. 创建 Shapefile
+            string folder = System.IO.Path.GetDirectoryName(filePath);
+            string name = System.IO.Path.GetFileName(filePath);
+            
+            IWorkspaceFactory workspaceFactory = new ShapefileWorkspaceFactoryClass();
+            IFeatureWorkspace featureWorkspace = (IFeatureWorkspace)workspaceFactory.OpenFromFile(folder, 0);
+            
+            // 定义字段
+            IFields fields = new FieldsClass();
+            IFieldsEdit fieldsEdit = (IFieldsEdit)fields;
+            
+            // OID 字段
+            IField fieldOID = new FieldClass();
+            IFieldEdit fieldEditOID = (IFieldEdit)fieldOID;
+            fieldEditOID.Name_2 = "OID";
+            fieldEditOID.Type_2 = esriFieldType.esriFieldTypeOID;
+            fieldsEdit.AddField(fieldOID);
+            
+            // Shape 字段
+            IField fieldShape = new FieldClass();
+            IFieldEdit fieldEditShape = (IFieldEdit)fieldShape;
+            fieldEditShape.Name_2 = "Shape";
+            fieldEditShape.Type_2 = esriFieldType.esriFieldTypeGeometry;
+            
+            IGeometryDef geometryDef = new GeometryDefClass();
+            IGeometryDefEdit geometryDefEdit = (IGeometryDefEdit)geometryDef;
+            geometryDefEdit.GeometryType_2 = geometries[0].GeometryType;
+            geometryDefEdit.SpatialReference_2 = geometries[0].SpatialReference;
+            fieldEditShape.GeometryDef_2 = geometryDef;
+            fieldsEdit.AddField(fieldShape);
+            
+            // 创建要素类
+            IFeatureClass featureClass = featureWorkspace.CreateFeatureClass(name, fields, null, null, esriFeatureType.esriFTSimple, "Shape", "");
+            
+            // 2. 插入数据
+            IFeatureCursor cursor = featureClass.Insert(true);
+            foreach (var geo in geometries)
+            {
+                IFeatureBuffer buffer = featureClass.CreateFeatureBuffer();
+                buffer.Shape = geo;
+                cursor.InsertFeature(buffer);
+            }
+            cursor.Flush();
+        }
+
+        /// <summary>
+        /// 导出选中的要素到 Shapefile
+        /// </summary>
+        public static void ExportSelectionToShapefile(IFeatureLayer featureLayer, string filePath)
+        {
+            IFeatureSelection featureSelection = featureLayer as IFeatureSelection;
+            ISelectionSet selectionSet = featureSelection.SelectionSet;
+            
+            if (selectionSet.Count == 0) throw new Exception("没有选中任何要素");
+
+            // 1. 获取源字段定义
+            IFeatureClass sourceClass = featureLayer.FeatureClass;
+            IFields sourceFields = sourceClass.Fields;
+            
+            // 2. 创建目标 Shapefile
+            string folder = System.IO.Path.GetDirectoryName(filePath);
+            string name = System.IO.Path.GetFileName(filePath);
+            
+            IWorkspaceFactory workspaceFactory = new ShapefileWorkspaceFactoryClass();
+            IFeatureWorkspace featureWorkspace = (IFeatureWorkspace)workspaceFactory.OpenFromFile(folder, 0);
+            
+            // 克隆字段 (Shapefile 有字段名长度限制，可能需要截断，暂简化处理)
+            // 为简单起见，我们重新定义核心字段，或者使用 IFeatureDataConverter 导出
+            // 这里使用更底层的 IFeatureDataConverter 导出选集会更稳健
+            
+            ExportByExporter(featureLayer, filePath);
+        }
+
+        private static void ExportByExporter(IFeatureLayer sourceLayer, string targetPath)
+        {
+            // 使用 Geoprocessor 或 FeatureDataConverter 导出选集
+            // 这里为了简化依赖，手动循环插入
+            
+            string folder = System.IO.Path.GetDirectoryName(targetPath);
+            string name = System.IO.Path.GetFileName(targetPath);
+            IWorkspaceFactory wf = new ShapefileWorkspaceFactoryClass();
+            IFeatureWorkspace fw = (IFeatureWorkspace)wf.OpenFromFile(folder, 0);
+
+            // 创建要素类 (使用源字段，注意Shapefile限制)
+            // 简化：仅保留 Shape 字段以避免复杂性，或者仅导出几何
+             // 实际上，为了稳健，我们通过 GeoProcessor 导出可能更好，但 AE 环境下 GP 较慢
+            // 还是写循环吧
+            
+            IFeatureClass sourceInfo = sourceLayer.FeatureClass;
+            // 简化：新建只有几何的 Shapefile，或者克隆字段
+            // Clone 字段逻辑需要处理别名和类型映射，较繁琐。
+            // 这种情况下，使用 IFeatureDataConverter 是标准做法。
+            
+            IDataset sourceDataset = sourceLayer.FeatureClass as IDataset;
+            IDatasetName sourceDatasetName = sourceDataset.FullName as IDatasetName;
+            
+            IWorkspaceName targetWorkspaceName = new WorkspaceNameClass();
+            targetWorkspaceName.WorkspaceFactoryProgID = "esriDataSourcesFile.ShapefileWorkspaceFactory";
+            targetWorkspaceName.PathName = folder;
+            
+            IFeatureClassName targetFeatureClassName = new FeatureClassNameClass();
+            IDatasetName targetDatasetName = (IDatasetName)targetFeatureClassName;
+            targetDatasetName.Name = name;
+            targetDatasetName.WorkspaceName = targetWorkspaceName;
+
+            IFeatureDataConverter converter = new FeatureDataConverterClass();
+            
+            // 仅导出选中要素
+            IQueryFilter qf = null; // 全部
+            // 但是我们需要SelectionSet。Converter通常作用于FeatureClass。
+            // 这里我们用 EnumFeatureGeometry 的方式手动写入最可靠
+            
+            // 回退到手动写入：
+            ManualExportSelection(sourceLayer, fw, name);
+        }
+
+        private static void ManualExportSelection(IFeatureLayer layer, IFeatureWorkspace fw, string name)
+        {
+             IFeatureClass srcClass = layer.FeatureClass;
+             // 简化：仅创建 Shape 字段
+             IFields fields = new FieldsClass();
+             IFieldsEdit fieldsEdit = (IFieldsEdit)fields;
+             
+             // OID
+            IField oidField = new FieldClass();
+            ((IFieldEdit)oidField).Name_2 = "OID";
+            ((IFieldEdit)oidField).Type_2 = esriFieldType.esriFieldTypeOID;
+            fieldsEdit.AddField(oidField);
+
+            // Shape
+            IField shapeField = new FieldClass();
+            ((IFieldEdit)shapeField).Name_2 = "Shape";
+            ((IFieldEdit)shapeField).Type_2 = esriFieldType.esriFieldTypeGeometry;
+            ((IFieldEdit)shapeField).GeometryDef_2 = srcClass.Fields.get_Field(srcClass.FindField(srcClass.ShapeFieldName)).GeometryDef;
+            fieldsEdit.AddField(shapeField);
+            
+            // 创建
+            IFeatureClass tgtClass = fw.CreateFeatureClass(name, fields, null, null, esriFeatureType.esriFTSimple, "Shape", "");
+            
+            // 插入选集
+            IFeatureSelection fSel = (IFeatureSelection)layer;
+            IEnumIDs enumIDs = fSel.SelectionSet.IDs;
+            int id = enumIDs.Next();
+            
+            IFeatureCursor insertCursor = tgtClass.Insert(true);
+            
+            while(id != -1)
+            {
+                IFeature srcFeat = srcClass.GetFeature(id);
+                IFeatureBuffer buf = tgtClass.CreateFeatureBuffer();
+                buf.Shape = srcFeat.ShapeCopy;
+                insertCursor.InsertFeature(buf);
+                id = enumIDs.Next();
+            }
+            insertCursor.Flush();
+        }
     }
 }

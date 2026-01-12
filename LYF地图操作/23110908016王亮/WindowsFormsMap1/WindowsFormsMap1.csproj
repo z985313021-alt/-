@@ -96,6 +96,7 @@
     <Reference Include="System.Windows.Forms.DataVisualization" />
     <Reference Include="System.Xml" />
     <Reference Include="Microsoft.VisualBasic" />
+    <Reference Include="System.Web.Extensions" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Form1.cs">
@@ -179,6 +180,9 @@
     <Compile Include="FormBuffer.cs">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Include="FormSmartBuffer.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="FormRoute.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -186,6 +190,9 @@
       <DependentUpon>FormRoute.cs</DependentUpon>
     </Compile>
     <Compile Include="FormOverlay.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="FormQueryResult.cs">
       <SubType>Form</SubType>
     </Compile>
     <Compile Include="AnalysisHelper.cs" />
