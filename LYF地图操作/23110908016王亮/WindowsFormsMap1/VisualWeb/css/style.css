@@ -692,3 +692,38 @@ header .version {
     height: 4px;
     background: rgba(255, 255, 255, 0.2);
 }
+
+/* Path Planning specific styles */
+.itinerary-item {
+    padding: 10px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.itinerary-item:hover {
+    background: rgba(0, 210, 255, 0.1);
+    transform: scale(1.02);
+}
+
+.itinerary-num {
+    width: 20px;
+    height: 20px;
+    background: var(--accent-color);
+    color: black;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 700;
+}
+
+.nav-item[data-view="route"].active {
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+}

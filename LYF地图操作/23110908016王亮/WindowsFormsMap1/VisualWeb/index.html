@@ -56,6 +56,11 @@
                     <span class="nav-icon">🔍</span>
                     <span class="nav-label">精准搜索</span>
                 </div>
+                <!-- [New] Path Analysis -->
+                <div class="nav-item" data-view="route">
+                    <span class="nav-icon">🛣️</span>
+                    <span class="nav-label">路径规划</span>
+                </div>
             </div>
 
             <div class="city-stats-panel">
@@ -140,6 +145,14 @@
                     </div>
                 </div>
 
+                <!-- Path Itinerary Panel (NEW) -->
+                <div id="route-itinerary" class="info-card" style="display: none; margin-top: 15px;">
+                    <h3>🛣️ 寻访行程单</h3>
+                    <div id="route-steps" style="font-size: 13px; color: var(--text-muted);">
+                        请在地图上点击起点和终点...
+                    </div>
+                </div>
+
                 <!-- System Info -->
                 <div class="info-card" id="detail-placeholder">
                     <h3>💡 使用提示</h3>
@@ -156,8 +169,8 @@
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
 
     <!-- Gallery Support Functions -->
-    <script src="js/gallery_functions.js"></script>
-    <script src="js/main.js"></script>
+    <script src="js/gallery_functions.js?v=2.1"></script>
+    <script src="js/main.js?v=2.1"></script>
 </body>
 
 </html>

@@ -103,6 +103,9 @@ namespace WindowsFormsMap1
                 // First inject map data
                 InjectMapData();
 
+                // First inject map data
+                InjectMapData();
+
                 // Then inject ICH data
                 WebBridge bridge = new WebBridge();
                 string json = bridge.GetAllData();
@@ -116,6 +119,7 @@ namespace WindowsFormsMap1
                 MessageBox.Show("数据注入错误: " + ex.Message, "Error");
             }
         }
+
 
         private void InjectMapData()
         {

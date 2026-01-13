@@ -8,6 +8,11 @@ let mapPoints = [];
 let allData = null;
 let bridge = null;
 let currentMode = 'point'; // 'point', 'choropleth', 'heatmap'
+let roadsData = null;
+let isRouteMode = false;
+let routePoints = []; // [StartPoint, EndPoint]
+let calculatedPath = null;
+let pathICH = [];
 
 const COLORS = ['#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981'];
 
@@ -164,8 +169,12 @@ async function initCharts() {
 function initInteractions() {
     document.querySelectorAll('.nav-item').forEach(item => {
         item.addEventListener('click', () => {
-            document.querySelector('.nav-item.active').classList.remove('active');
+            const prevActive = document.querySelector('.nav-item.active');
+            if (prevActive) prevActive.classList.remove('active');
             item.classList.add('active');
+
+            const view = item.dataset.view;
+            handleViewChange(view);
         });
     });
 
@@ -516,6 +525,72 @@ function renderMap(points) {
         });
     }
 
+    // [New] Route Mode Skeleton (Always show background roads if data exists)
+    if (isRouteMode && roadsData) {
+        // 1. Background Roads (Simplified high-level skeleton)
+        option.series.push({
+            name: '路网骨架',
+            type: 'lines',
+            coordinateSystem: 'geo',
+            polyline: true,
+            large: true, // [Critical] Enable large data mode for lines
+            progressive: 2000,
+            data: roadsData.features.map(f => ({
+                coords: f.geometry.coordinates,
+                lineStyle: { normal: { color: 'rgba(102, 126, 234, 0.4)', width: 1.0 } }
+            })),
+            silent: true
+        });
+
+        // 2. Active Selection Markers
+        if (routePoints.length > 0) {
+            option.series.push({
+                type: 'scatter',
+                coordinateSystem: 'geo',
+                data: routePoints.map((p, i) => ({
+                    name: i === 0 ? '起点' : '终点',
+                    value: p
+                })),
+                symbolSize: 20,
+                itemStyle: {
+                    color: (p) => p.name === '起点' ? '#10b981' : '#ef4444',
+                    shadowBlur: 10,
+                    shadowColor: '#fff'
+                },
+                label: {
+                    show: true,
+                    formatter: '{b}',
+                    position: 'top',
+                    color: '#fff',
+                    fontWeight: 'bold'
+                }
+            });
+        }
+    }
+
+    // [New] Render Calculated Path (Persistent)
+    if (calculatedPath) {
+        option.series.push({
+            name: '寻访路径',
+            type: 'lines',
+            coordinateSystem: 'geo',
+            polyline: true,
+            data: [{
+                coords: calculatedPath,
+                lineStyle: { normal: { color: '#00d2ff', width: 4, shadowBlur: 10, shadowColor: '#00d2ff' } }
+            }],
+            effect: {
+                show: true,
+                period: 4,
+                trailLength: 0.7,
+                color: '#fff',
+                symbolSize: 4
+            }
+        });
+    }
+
+
+
     chart.setOption(option, {
         notMerge: true,
         lazyUpdate: false // 强制立即更新，解决缩放不同步问题
@@ -796,10 +871,363 @@ function initMapEvents() {
             // 点击散点：显示详情
             showDetail(params.name, params.value[2], params.value[3]);
         } else if (params.componentType === 'geo' || (params.componentType === 'series' && params.seriesType === 'map')) {
-            // 点击地图区域：显示该市卡片
-            showCityCards(params.name);
+            // 点击地图区域
+            if (isRouteMode) {
+                handleRouteClick(params.event.event.zrX, params.event.event.zrY);
+            } else {
+                showCityCards(params.name);
+            }
         }
     });
+}
+
+/**
+ * [New] View Management
+ */
+function handleViewChange(view) {
+    console.log("Switching to view:", view);
+
+    // Toggle Itinerary Panel
+    const itinerary = document.getElementById('route-itinerary');
+    const chartBox = document.getElementById('category-chart');
+    const placeholder = document.getElementById('detail-placeholder');
+
+    if (view === 'route') {
+        isRouteMode = true;
+        if (itinerary) itinerary.style.display = 'block';
+        if (chartBox) chartBox.style.display = 'none';
+        if (placeholder) placeholder.style.display = 'none';
+
+        // 加载并渲染路网骨架
+        if (!roadsData) {
+            loadRoadsData();
+        } else {
+            renderMap(getFilteredPoints());
+        }
+    } else {
+        isRouteMode = false;
+        if (itinerary) itinerary.style.display = 'none';
+        if (chartBox) chartBox.style.display = 'block';
+        if (placeholder) placeholder.style.display = 'block';
+
+        renderMap(getFilteredPoints());
+    }
+}
+
+/**
+ * [Core Logic] Build Topo Graph from roads.json
+ */
+let roadGraph = new Map(); // "lng,lat" -> [{to: "lng,lat", dist: number}]
+
+function buildRoadGraph() {
+    if (!roadsData) return;
+    roadGraph.clear();
+
+    roadsData.features.forEach(feature => {
+        const coords = feature.geometry.coordinates;
+        for (let i = 0; i < coords.length - 1; i++) {
+            const p1 = coords[i].join(',');
+            const p2 = coords[i + 1].join(',');
+            const dist = Math.sqrt(Math.pow(coords[i][0] - coords[i + 1][0], 2) + Math.pow(coords[i][1] - coords[i + 1][1], 2));
+
+            if (!roadGraph.has(p1)) roadGraph.set(p1, []);
+            if (!roadGraph.has(p2)) roadGraph.set(p2, []);
+
+            roadGraph.get(p1).push({ to: p2, dist: dist, coords: coords[i + 1] });
+            roadGraph.get(p2).push({ to: p1, dist: dist, coords: coords[i] });
+        }
+    });
+    console.log("Road graph built with", roadGraph.size, "nodes.");
+}
+
+async function loadRoadsData() {
+    console.log("Loading roads data via bridge...");
+    try {
+        // [New] Primary: Pull from C# bridge (Safe for large strings)
+        if (window.chrome && window.chrome.webview && window.chrome.webview.hostObjects && window.chrome.webview.hostObjects.bridge) {
+            const bridge = window.chrome.webview.hostObjects.bridge;
+            const roadsJson = await bridge.GetRoadsData();
+            if (roadsJson && !roadsJson.startsWith('{"error"')) {
+                roadsData = JSON.parse(roadsJson);
+                console.log("Roads data loaded via bridge. Features:", roadsData.features.length);
+                buildRoadGraph();
+                renderMap(getFilteredPoints());
+                return;
+            } else {
+                console.warn("Bridge returned error for roads data:", roadsJson);
+            }
+        }
+
+        // Fallback: Check global variable (legacy injection)
+        if (window.ROADS_DATA) {
+            console.log("Using legacy injected ROADS_DATA.");
+            roadsData = window.ROADS_DATA;
+            buildRoadGraph();
+            renderMap(getFilteredPoints());
+            return;
+        }
+
+        // Final Fallback: Fetch
+        console.log("Attempting fetch fallback for roads.json...");
+        const res = await fetch('data/roads.json');
+        roadsData = await res.json();
+        console.log("Roads data loaded via fetch.");
+        buildRoadGraph();
+        renderMap(getFilteredPoints());
+    } catch (e) {
+        console.warn("Failed to load roads data through all channels:", e);
+    }
+}
+
+/**
+ * [Core Logic] Start planning the route
+ */
+function startPlanning() {
+    if (routePoints.length < 2) {
+        alert("请先在地图上选定起点和终点！");
+        return;
+    }
+
+    if (!roadsData) {
+        alert("路网数据尚未加载完成，请稍后...");
+        return;
+    }
+
+    // 1. 构建拓扑图和执行 Dijkstra (这里使用极简直线吸附模拟)
+    const resultPath = calculateShortestPath(routePoints[0], routePoints[1]);
+
+    if (!resultPath || resultPath.length === 0) {
+        alert("未找到连通路径，请尝试重新选择点位。");
+        return;
+    }
+
+    // 2. 识别沿途非遗 (缓冲区分析)
+    const nearbyICH = findICHAlongPath(resultPath, 0.5); // 0.5度约50km
+
+    // 3. 渲染结果
+    calculatedPath = resultPath;
+    pathICH = nearbyICH;
+    renderMap(getFilteredPoints());
+    updateItineraryUI();
+}
+
+function clearRoute() {
+    routePoints = [];
+    calculatedPath = null;
+    pathICH = [];
+    renderMap(getFilteredPoints());
+    updateItineraryUI();
+}
+
+// [New] Binary Heap for Fast Dijkstra
+class MinHeap {
+    constructor() {
+        this.heap = [];
+    }
+    push(node) {
+        this.heap.push(node);
+        this.bubbleUp();
+    }
+    pop() {
+        if (this.size() === 0) return null;
+        if (this.size() === 1) return this.heap.pop();
+        const min = this.heap[0];
+        this.heap[0] = this.heap.pop();
+        this.bubbleDown();
+        return min;
+    }
+    size() { return this.heap.length; }
+    bubbleUp() {
+        let index = this.heap.length - 1;
+        while (index > 0) {
+            let parentIndex = Math.floor((index - 1) / 2);
+            if (this.heap[index].dist >= this.heap[parentIndex].dist) break;
+            [this.heap[index], this.heap[parentIndex]] = [this.heap[parentIndex], this.heap[index]];
+            index = parentIndex;
+        }
+    }
+    bubbleDown() {
+        let index = 0;
+        while (true) {
+            let leftChild = 2 * index + 1;
+            let rightChild = 2 * index + 2;
+            let smallest = index;
+            if (leftChild < this.heap.length && this.heap[leftChild].dist < this.heap[smallest].dist) smallest = leftChild;
+            if (rightChild < this.heap.length && this.heap[rightChild].dist < this.heap[smallest].dist) smallest = rightChild;
+            if (smallest === index) break;
+            [this.heap[index], this.heap[smallest]] = [this.heap[smallest], this.heap[index]];
+            index = smallest;
+        }
+    }
+}
+
+function calculateShortestPath(startPoint, endPoint) {
+    if (roadGraph.size === 0) return [startPoint, endPoint];
+
+    // 1. Snapping
+    let startNode = null, endNode = null;
+    let minDistS = Infinity, minDistE = Infinity;
+    for (let nodeKey of roadGraph.keys()) {
+        const [lng, lat] = nodeKey.split(',').map(Number);
+        const dS = Math.pow(lng - startPoint[0], 2) + Math.pow(lat - startPoint[1], 2);
+        const dE = Math.pow(lng - endPoint[0], 2) + Math.pow(lat - endPoint[1], 2);
+        if (dS < minDistS) { minDistS = dS; startNode = nodeKey; }
+        if (dE < minDistE) { minDistE = dE; endNode = nodeKey; }
+    }
+
+    // 2. Fast Dijkstra with MinHeap
+    let distances = new Map();
+    let previous = new Map();
+    let pq = new MinHeap();
+
+    for (let node of roadGraph.keys()) {
+        distances.set(node, Infinity);
+    }
+    distances.set(startNode, 0);
+    pq.push({ id: startNode, dist: 0 });
+
+    while (pq.size() > 0) {
+        let { id: u, dist: d } = pq.pop();
+        if (d > distances.get(u)) continue;
+        if (u === endNode) break;
+
+        const neighbors = roadGraph.get(u) || [];
+        for (let edge of neighbors) {
+            let alt = d + edge.dist;
+            if (alt < distances.get(edge.to)) {
+                distances.set(edge.to, alt);
+                previous.set(edge.to, u);
+                pq.push({ id: edge.to, dist: alt });
+            }
+        }
+    }
+
+    // 3. Reconstruct
+    let path = [];
+    let curr = endNode;
+    if (previous.has(curr) || curr === startNode) {
+        while (curr) {
+            path.unshift(curr.split(',').map(Number));
+            curr = previous.get(curr);
+        }
+    }
+    return [startPoint, ...path, endPoint];
+}
+
+function findICHAlongPath(path, buffer) {
+    const points = getFilteredPoints();
+    // Use a step to speed up buffer check if path is long
+    const step = Math.max(1, Math.floor(path.length / 50));
+    return points.filter(p => {
+        for (let i = 0; i < path.length; i += step) {
+            const node = path[i];
+            const dist = Math.sqrt(Math.pow(p.x - node[0], 2) + Math.pow(p.y - node[1], 2));
+            if (dist < buffer) return true;
+        }
+        return false;
+    }).slice(0, 5);
+}
+
+function renderRouteResult(path, ichList) {
+    const option = chart.getOption();
+
+    // 添加流光路径
+    option.series.push({
+        name: '寻访路径',
+        type: 'lines',
+        coordinateSystem: 'geo',
+        polyline: true,
+        data: [{
+            coords: path,
+            lineStyle: { normal: { color: '#00d2ff', width: 4, curveness: 0.2, shadowBlur: 10, shadowColor: '#00d2ff' } }
+        }],
+        effect: {
+            show: true,
+            period: 4,
+            trailLength: 0.7,
+            color: '#fff',
+            symbolSize: 4
+        }
+    });
+
+    chart.setOption(option);
+
+    // 更新右侧面板显示非遗
+    const steps = document.getElementById('route-steps');
+    let ichHtml = ichList.length > 0 ? '<div style="margin-top:15px; border-top:1px solid #444; padding-top:10px;"><b>✨ 沿途非遗推荐：</b></div>' : '';
+
+    ichList.forEach(p => {
+        ichHtml += `
+            <div class="itinerary-item" onclick="showDetail('${p.name}', '${p.category}', '${p.city}')">
+                <div class="itinerary-num" style="background:#8b5cf6">★</div>
+                <div>${p.name} <br/><small>${p.city} · ${p.category}</small></div>
+            </div>
+        `;
+    });
+
+    steps.innerHTML = `
+        <div class="itinerary-item"><span class="itinerary-num">始</span> ${path[0][0].toFixed(2)}, ${path[0][1].toFixed(2)}</div>
+        <div class="itinerary-item"><span class="itinerary-num">终</span> ${path[path.length - 1][0].toFixed(2)}, ${path[path.length - 1][1].toFixed(2)}</div>
+        ${ichHtml}
+        <button class="card-btn" style="margin-top:10px; width:100%" onclick="location.reload()">重新规划</button>
+    `;
+}
+
+function handleRouteClick(x, y) {
+    const pt = chart.convertFromPixel('geo', [x, y]);
+    if (!pt) return;
+
+    if (routePoints.length >= 2) routePoints = []; // Reset
+
+    routePoints.push(pt);
+    console.log("Point added for route:", pt);
+
+    updateItineraryUI();
+    renderMap(getFilteredPoints());
+}
+
+function updateItineraryUI() {
+    const steps = document.getElementById('route-steps');
+    if (!steps) return;
+
+    if (calculatedPath) {
+        let ichHtml = pathICH.length > 0 ? '<div style="margin-top:15px; border-top:1px solid #444; padding-top:10px;"><b>✨ 沿途非遗推荐：</b></div>' : '';
+        pathICH.forEach(p => {
+            ichHtml += `
+                <div class="itinerary-item" onclick="showDetail('${p.name}', '${p.category}', '${p.city}')">
+                    <div class="itinerary-num" style="background:#8b5cf6">★</div>
+                    <div>${p.name} <br/><small>${p.city} · ${p.category}</small></div>
+                </div>
+            `;
+        });
+
+        steps.innerHTML = `
+            <div class="itinerary-item"><span class="itinerary-num">始</span> ${calculatedPath[0][0].toFixed(2)}, ${calculatedPath[0][1].toFixed(2)}</div>
+            <div class="itinerary-item"><span class="itinerary-num">终</span> ${calculatedPath[calculatedPath.length - 1][0].toFixed(2)}, ${calculatedPath[calculatedPath.length - 1][1].toFixed(2)}</div>
+            ${ichHtml}
+            <button class="card-btn" style="margin-top:10px; width:100%" onclick="clearRoute()">重新规划</button>
+        `;
+        return;
+    }
+
+    if (routePoints.length === 0) {
+        steps.innerHTML = '请在地图上点击起点和终点...';
+    } else if (routePoints.length === 1) {
+        steps.innerHTML = '<div class="itinerary-item"><span class="itinerary-num">起</span> 已设置起点</div><div style="margin-top:5px; color:#aaa">请点击地图设置终点...</div>';
+    } else {
+        steps.innerHTML = `
+            <div class="itinerary-item"><span class="itinerary-num">起</span> 起始坐标: ${routePoints[0][0].toFixed(2)}, ${routePoints[0][1].toFixed(2)}</div>
+            <div class="itinerary-item"><span class="itinerary-num">终</span> 结束坐标: ${routePoints[1][0].toFixed(2)}, ${routePoints[1][1].toFixed(2)}</div>
+            <div style="margin-top:10px; text-align:center">
+                <button class="card-btn card-btn-primary" style="width:100%" onclick="startPlanning()">
+                    ✨ 开始规划
+                </button>
+                <button class="card-btn" style="width:100%; margin-top:5px; background:rgba(255,255,255,0.1)" onclick="clearRoute()">
+                    取消选择
+                </button>
+            </div>
+        `;
+    }
 }
 
 /**

@@ -151,6 +151,33 @@ namespace WindowsFormsMap1
             }
         }
 
+        // 5. 获取大数据量的路网数据 (供 JS 直接拉取，避免 ExecuteScriptAsync 的大小限制)
+        public string GetRoadsData()
+        {
+            try
+            {
+                // 统一路径逻辑
+                string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+                string path = System.IO.Path.Combine(baseDir, "VisualWeb", "data", "roads.json");
+
+                // 如果 bin 目录下没找到，尝试向上找源码目录 (开发环境下)
+                if (!System.IO.File.Exists(path))
+                {
+                     path = System.IO.Path.GetFullPath(System.IO.Path.Combine(baseDir, @"..\..\VisualWeb", "data", "roads.json"));
+                }
+
+                if (System.IO.File.Exists(path))
+                {
+                    return System.IO.File.ReadAllText(path);
+                }
+                return "{\"error\": \"roads.json not found at " + path + "\"}";
+            }
+            catch (Exception ex)
+            {
+                return "{\"error\": \"" + ex.Message + "\"}";
+            }
+        }
+
         // --- 数据模型类 ---
         public class ProjectPoint
         {
