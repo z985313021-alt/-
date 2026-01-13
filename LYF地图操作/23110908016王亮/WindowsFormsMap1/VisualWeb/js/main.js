@@ -257,6 +257,12 @@ function renderMap(points) {
     chart.on('click', 'series', (params) => {
         showDetail(params.name, params.value[2], params.value[3]);
     });
+
+    // [New] Listen for map region clicks (e.g., clicking a city)
+    chart.on('click', 'geo', (params) => {
+        console.log('Clicked on region:', params.name);
+        showCityCards(params.name);
+    });
 }
 
 
@@ -273,74 +279,76 @@ function showDetail(name, cat, city) {
     const hue = (name.length * 37) % 360;
     const gradientColors = `linear-gradient(135deg, hsl(${hue}, 60%, 60%) 0%, hsl(${hue + 40}, 60%, 40%) 100%)`;
 
-    // Create card HTML with side panel structure
+    // Create card HTML with side panel structure, wrapped in center container
     container.innerHTML = `
-        <div class="ich-card" onclick="handleCardClick(this)">
-            <div class="card-image-full" style="background: ${gradientColors}">
-                <img src="images/${encodeURIComponent(name)}.jpg" 
-                     alt="${name}"
-                     style="width: 100%; height: 100%; object-fit: cover; transition: transform 0.6s ease;"
-                     onerror="this.style.display='none'">
+        <div class="card-detail-center">
+            <div class="ich-card" onclick="handleCardClick(this)">
+                <div class="card-image-full" style="background: ${gradientColors}">
+                    <img src="images/${encodeURIComponent(name)}.jpg" 
+                         alt="${name}"
+                         style="width: 100%; height: 100%; object-fit: cover; transition: transform 0.6s ease;"
+                         onerror="this.style.display='none'">
+                    
+                    <div class="card-gradient-overlay"></div>
+                    <div class="card-title-overlay">
+                        <h2>${name}</h2>
+                    </div>
+                </div>
                 
-                <div class="card-gradient-overlay"></div>
-                <div class="card-title-overlay">
-                    <h2>${name}</h2>
-                </div>
-            </div>
-            
-            <!-- 第一次点击展开的内容 -->
-            <div class="card-expanded-content" onclick="event.stopPropagation()">
-                <div class="card-meta">
-                    <span class="card-tag category">${cat}</span>
-                    <span class="card-tag city">${city}</span>
-                </div>
-                <p class="card-desc">
-                    该非物质文化遗产项目属于<strong>${cat}</strong>类别，位于<strong>${city}</strong>。
-                    点击“查看档案”或再次点击卡片可查看完整侧边详情。
-                </p>
-                <div class="card-actions">
-                    <button class="card-btn card-btn-primary" onclick="toggleSideInfo(this)">
-                        📂 查看档案
-                    </button>
-                    <button class="card-btn card-btn-secondary" onclick="event.stopPropagation(); likeItem('${name}')">
-                        ❤️ 点赞
-                    </button>
-                    <button class="card-btn card-btn-secondary" onclick="event.stopPropagation(); showComments('${name}')">
-                        💬 评论
-                    </button>
-                </div>
-            </div>
-
-            <!-- 第二次点击/侧滑展开的详细内容 -->
-            <div class="card-side-panel" onclick="event.stopPropagation()">
-                <div class="side-panel-header">
-                    <div class="side-panel-title">${name}</div>
+                <!-- 第一次点击展开的内容 -->
+                <div class="card-expanded-content" onclick="event.stopPropagation()">
                     <div class="card-meta">
                         <span class="card-tag category">${cat}</span>
                         <span class="card-tag city">${city}</span>
                     </div>
-                </div>
-                
-                <div class="side-panel-info-row">
-                    <i>📅</i> <strong>申报日期：</strong> 2006年
-                </div>
-                <div class="side-panel-info-row">
-                    <i>🔢</i> <strong>项目编号：</strong> VIII-${Math.floor(Math.random() * 1000)}
-                </div>
-                <div class="side-panel-info-row">
-                    <i>📍</i> <strong>保护单位：</strong> ${city}非遗保护中心
-                </div>
-
-                <div class="side-panel-desc">
-                    <h3>项目简介</h3>
-                    <p>这里将显示关于${name}的详细数据库记录。目前为模拟数据，后续将连接数据库展示完整的历史沿革、技艺特征、传承人信息等内容。</p>
-                    <br>
-                    <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
+                    <p class="card-desc">
+                        该非物质文化遗产项目属于<strong>${cat}</strong>类别，位于<strong>${city}</strong>。
+                        点击“查看档案”或再次点击卡片可查看完整侧边详情。
+                    </p>
+                    <div class="card-actions">
+                        <button class="card-btn card-btn-primary" onclick="toggleSideInfo(this)">
+                            📂 查看档案
+                        </button>
+                        <button class="card-btn card-btn-secondary" onclick="event.stopPropagation(); likeItem('${name}')">
+                            ❤️ 点赞
+                        </button>
+                        <button class="card-btn card-btn-secondary" onclick="event.stopPropagation(); showComments('${name}')">
+                            💬 评论
+                        </button>
+                    </div>
                 </div>
 
-                <button class="btn-back-to-expand" onclick="closeSideInfo(this)">
-                    ⬅️ 返回概览
-                </button>
+                <!-- 第二次点击/侧滑展开的详细内容 -->
+                <div class="card-side-panel" onclick="event.stopPropagation()">
+                    <div class="side-panel-header">
+                        <div class="side-panel-title">${name}</div>
+                        <div class="card-meta">
+                            <span class="card-tag category">${cat}</span>
+                            <span class="card-tag city">${city}</span>
+                        </div>
+                    </div>
+                    
+                    <div class="side-panel-info-row">
+                        <i>📅</i> <strong>申报日期：</strong> 2006年
+                    </div>
+                    <div class="side-panel-info-row">
+                        <i>🔢</i> <strong>项目编号：</strong> VIII-${Math.floor(Math.random() * 1000)}
+                    </div>
+                    <div class="side-panel-info-row">
+                        <i>📍</i> <strong>保护单位：</strong> ${city}非遗保护中心
+                    </div>
+
+                    <div class="side-panel-desc">
+                        <h3>项目简介</h3>
+                        <p>这里将显示关于${name}的详细数据库记录。目前为模拟数据，后续将连接数据库展示完整的历史沿革、技艺特征、传承人信息等内容。</p>
+                        <br>
+                        <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
+                    </div>
+
+                    <button class="btn-back-to-expand" onclick="closeSideInfo(this)">
+                        ⬅️ 返回概览
+                    </button>
+                </div>
             </div>
         </div>
     `;
@@ -351,6 +359,105 @@ function showDetail(name, cat, city) {
         loadComments(name);
     }
 }
+
+// [New] Show City Cards (Slay the Spire style hand)
+function showCityCards(cityName) {
+    // Filter all ICH items from this city
+    const cityDisplayName = cityName.replace('市', '');
+    const cityItems = mapPoints.filter(p =>
+        p.city && (p.city.includes(cityDisplayName) || cityDisplayName.includes(p.city))
+    );
+
+    if (!cityItems || cityItems.length === 0) {
+        console.log('No items found for city:', cityName);
+        return;
+    }
+
+    const overlay = document.getElementById('card-overlay');
+    const container = document.getElementById('card-container');
+
+    // Create card hand
+    const handHtml = `
+        <div class="card-hand" id="card-hand">
+            ${cityItems.map((item, index) => {
+        const hue = (item.name.length * 37) % 360;
+        const gradient = `linear-gradient(135deg, hsl(${hue}, 60%, 60%) 0%, hsl(${hue + 40}, 60%, 40%) 100%)`;
+
+        return `
+                    <div class="hand-card" 
+                         data-index="${index}"
+                         data-name="${item.name}"
+                         data-category="${item.category}"
+                         data-city="${item.city}"
+                         onclick="handleHandCardClick(this)">
+                        <div class="hand-card-image" style="background: ${gradient}">
+                            <img src="images/${encodeURIComponent(item.name)}.jpg" 
+                                 alt="${item.name}"
+                                 onerror="this.style.display='none'">
+                            <div class="hand-card-overlay"></div>
+                            <div class="hand-card-title">${item.name}</div>
+                        </div>
+                    </div>
+                `;
+    }).join('')}
+        </div>
+    `;
+
+    container.innerHTML = handHtml;
+    overlay.style.display = 'flex';
+
+    // Position cards with overlap effect
+    setTimeout(() => {
+        const cards = document.querySelectorAll('.hand-card');
+        const totalCards = cards.length;
+        const cardWidth = 200;
+        const overlapSpacing = 80; // Cards overlap, only show 80px of each card
+        const totalWidth = (totalCards - 1) * overlapSpacing + cardWidth;
+
+        // Calculate center position relative to card-hand container
+        const hand = document.getElementById('card-hand');
+        const handWidth = hand.offsetWidth;
+        const startX = (handWidth - totalWidth) / 2;
+
+        cards.forEach((card, i) => {
+            card.style.left = (startX + i * overlapSpacing) + 'px';
+            card.style.zIndex = i + 1;
+        });
+    }, 50);
+}
+
+// [New] Handle hand card click
+let selectedCard = null;
+
+function handleHandCardClick(cardElement) {
+    // First click: select card (move to center of hand, raise up)
+    if (!cardElement.classList.contains('selected')) {
+        // Deselect all other cards
+        document.querySelectorAll('.hand-card.selected').forEach(c => {
+            c.classList.remove('selected');
+        });
+
+        cardElement.classList.add('selected');
+        selectedCard = cardElement;
+
+        // Move to center position of the hand
+        const hand = document.getElementById('card-hand');
+        const handWidth = hand.offsetWidth;
+        const centerX = (handWidth - 200) / 2; // 200 is card width
+        cardElement.style.left = centerX + 'px';
+    }
+    // Second click: expand to full screen detail (center of screen)
+    else {
+        const name = cardElement.dataset.name;
+        const category = cardElement.dataset.category;
+        const city = cardElement.dataset.city;
+
+        // Clear hand and show full detail in screen center
+        showDetail(name, category, city);
+        selectedCard = null;
+    }
+}
+
 
 // Close card overlay
 document.getElementById('btn-close-cards')?.addEventListener('click', () => {
