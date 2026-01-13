@@ -11,6 +11,47 @@ let currentMode = 'point'; // 'point', 'choropleth', 'heatmap'
 
 const COLORS = ['#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981'];
 
+/**
+ * [New] Categorized Image Folder Mapping
+ * Maps ICH category to the actual folder names provided by the USER
+ * 重要：左侧是数据库里的分类名，右侧是实际文件夹名
+ */
+const CATEGORY_FOLDER_MAP = {
+    "传统戏剧": "传统戏剧非遗",
+    "传统音乐": "传统音乐非遗",
+    "传统技艺": "技艺非遗",
+    "传统美术": "美术非遗",
+    "民间文学": "民间文学非遗",
+    "民俗": "民俗非遗",
+    "曲艺": "曲艺非遗",
+    "传统体育、游艺与杂技": "体育游艺杂技",
+    "传统舞蹈": "舞蹈非遗",
+    "传统医药": "医药非遗"
+};
+
+/**
+ * [New] Image Path Generator
+ * Generates an array of potential image paths for a given ICH item
+ */
+function getPossibleImagePaths(name, cat) {
+    const folder = CATEGORY_FOLDER_MAP[cat] || "其他";
+    // 修正：根据用户最新截图，分类文件夹直接位于 images/ 下
+    // 重要：本地文件系统不需要 URL 编码，直接使用中文名
+    const basePath = `images/${folder}/${name}`;
+
+    const extensions = ['.jpg', '.png', '.jpeg', '.webp'];
+    let paths = [];
+
+    // 1. 尝试直接匹配各种后缀
+    extensions.forEach(ext => paths.push(basePath + ext));
+
+    // 2. 尝试带序号的匹配 (1-5) 且兼容所有后缀
+    for (let i = 1; i <= 5; i++) {
+        extensions.forEach(ext => paths.push(`${basePath}${i}${ext}`));
+    }
+    return paths;
+}
+
 // Initialize layout and charts
 document.addEventListener('DOMContentLoaded', async () => {
     // 1. Initialize Charts First
@@ -496,16 +537,27 @@ function showDetail(name, cat, city) {
     const hue = (name.length * 37) % 360;
     const gradientColors = `linear-gradient(135deg, hsl(${hue}, 60%, 60%) 0%, hsl(${hue + 40}, 60%, 40%) 100%)`;
 
+    // [New] Image Sniffing Logic (Multiplexing)
+    const possiblePaths = getPossibleImagePaths(name, cat);
+
     // Create card HTML with side panel structure
     container.innerHTML = `
         <div class="card-detail-center">
             <div class="ich-card" onclick="handleCardClick(this)">
-                <div class="card-image-full" style="background: ${gradientColors}">
-                    <img src="images/${encodeURIComponent(name)}.jpg" 
-                         alt="${name}"
-                         style="width: 100%; height: 100%; object-fit: cover; transition: transform 0.6s ease;"
-                         onerror="this.style.display='none'">
+                <div class="card-image-full" id="card-media-gallery" style="background: ${gradientColors}">
+                    <!-- Main image with failover logic -->
+                    <img src="${possiblePaths[0]}" 
+                         class="gallery-img active"
+                         data-paths='${JSON.stringify(possiblePaths)}'
+                         data-current="0"
+                         style="width: 100%; height: 100%; object-fit: cover; object-position: center;"
+                         onerror="handleImageError(this)">
                     
+                    <div class="gallery-controls" id="gallery-nav" style="display:none">
+                        <button class="gallery-btn prev" onclick="event.stopPropagation(); shiftGallery(this, -1)">‹</button>
+                        <button class="gallery-btn next" onclick="event.stopPropagation(); shiftGallery(this, 1)">›</button>
+                    </div>
+
                     <div class="card-gradient-overlay"></div>
                     <div class="card-title-overlay">
                         <h2>${name}</h2>
@@ -591,6 +643,7 @@ function showCityCards(cityName) {
             ${cityItems.map((item, index) => {
         const hue = (item.name.length * 37) % 360;
         const gradient = `linear-gradient(135deg, hsl(${hue}, 60%, 60%) 0%, hsl(${hue + 40}, 60%, 40%) 100%)`;
+        const imagePaths = getPossibleImagePaths(item.name, item.category);
 
         return `
                     <div class="hand-card" 
@@ -600,9 +653,12 @@ function showCityCards(cityName) {
                          data-city="${item.city}"
                          onclick="handleHandCardClick(this)">
                         <div class="hand-card-image" style="background: ${gradient}">
-                            <img src="images/${encodeURIComponent(item.name)}.jpg" 
+                            <img src="${imagePaths[0]}" 
                                  alt="${item.name}"
-                                 onerror="this.style.display='none'">
+                                 data-paths='${JSON.stringify(imagePaths)}'
+                                 data-current="0"
+                                 style="width: 100%; height: 100%; object-fit: cover; object-position: center;"
+                                 onerror="handleImageError(this)">
                             <div class="hand-card-overlay"></div>
                             <div class="hand-card-title">${item.name}</div>
                         </div>
@@ -744,4 +800,61 @@ function initMapEvents() {
             showCityCards(params.name);
         }
     });
+}
+
+/**
+ * [New] Image Failover & Sniffing Logic
+ * Tries next available path if current one fails.
+ */
+function handleImageError(img) {
+    // Check if we have path data
+    if (!img.dataset.paths) {
+        console.warn('[Image] No path data for image, hiding');
+        img.style.display = 'none';
+        return;
+    }
+
+    const paths = JSON.parse(img.dataset.paths || "[]");
+    let currentIdx = parseInt(img.dataset.current || "0");
+
+    console.log(`[Image] Failed to load: ${paths[currentIdx]}`);
+
+    // Try the next path in the queue
+    if (currentIdx + 1 < paths.length) {
+        currentIdx++;
+        img.dataset.current = currentIdx;
+        img.src = paths[currentIdx];
+        console.log(`[Image] Trying next path: ${paths[currentIdx]}`);
+
+        // If we found a working image and there are more potential ones, 
+        // enable the gallery navigation
+        const nav = document.getElementById('gallery-nav');
+        if (nav && currentIdx >= 1) nav.style.display = 'flex';
+    } else {
+        // No more images to try, show placeholder color or hide
+        console.warn(`[Image] All ${paths.length} paths failed. Showing gradient fallback.`);
+        img.style.display = 'none';
+    }
+}
+
+/**
+ * [New] Gallery Navigation
+ */
+function shiftGallery(btn, direction) {
+    const gallery = btn.closest('#card-media-gallery');
+    const img = gallery.querySelector('.gallery-img');
+    if (!img || !img.dataset.paths) return;
+
+    const paths = JSON.parse(img.dataset.paths || "[]");
+    let currentIdx = parseInt(img.dataset.current || "0");
+
+    currentIdx = (currentIdx + direction + paths.length) % paths.length;
+
+    // Switch image with a simple fade
+    img.style.opacity = '0';
+    setTimeout(() => {
+        img.src = paths[currentIdx];
+        img.dataset.current = currentIdx;
+        img.onload = () => img.style.opacity = '1';
+    }, 200);
 }

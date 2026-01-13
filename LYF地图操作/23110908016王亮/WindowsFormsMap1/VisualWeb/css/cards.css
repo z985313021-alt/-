@@ -209,7 +209,53 @@
 }
 
 .ich-card:hover .card-image-full img {
+    transform: scale(1.02);
+}
+
+/* --- [New] Media Gallery Support --- */
+.card-image-full {
+    position: relative;
+    overflow: hidden;
+}
+
+.gallery-img {
+    transition: opacity 0.4s ease-in-out;
+}
+
+.gallery-controls {
+    position: absolute;
+    top: 50%;
+    left: 0;
+    right: 0;
+    transform: translateY(-50%);
+    display: flex;
+    justify-content: space-between;
+    padding: 0 15px;
+    z-index: 5;
+    pointer-events: none;
+}
+
+.gallery-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: white;
+    font-size: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    pointer-events: auto;
+    transition: all 0.3s ease;
+}
+
+.gallery-btn:hover {
+    background: var(--accent-gradient);
     transform: scale(1.1);
+    box-shadow: 0 0 15px rgba(102, 126, 234, 0.4);
 }
 
 /* 底部渐变遮罩 */
