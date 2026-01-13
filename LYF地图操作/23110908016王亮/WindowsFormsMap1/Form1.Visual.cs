@@ -78,9 +78,8 @@ namespace WindowsFormsMap1
             }
         }
 
-        private bool _isVisualLayoutInitialized = false;
-        private SplitContainer _splitContainerVisual;
-        private Panel _panelMapToolbar;
+        // [Member E] Added: Dynamic PageLayoutControl for Thematic Maps
+        private ESRI.ArcGIS.Controls.AxPageLayoutControl _axPageLayoutVisual;
 
         public void InitVisualLayout()
         {
@@ -93,12 +92,14 @@ namespace WindowsFormsMap1
                 // 1. 结构化容器
                 _panelMainContent = new Panel { Dock = DockStyle.Fill, BackColor = System.Drawing.Color.AliceBlue };
                 _panelSidebar = new Panel { Width = 80, Dock = DockStyle.Left, BackColor = Color.White, Padding = new Padding(5, 20, 5, 5) };
+
                 AddSidebarButton("全景", 0);
-                AddSidebarButton("地市", 1);
+                AddSidebarButton("搜索", 1);
                 AddSidebarButton("分类", 2);
                 AddSidebarButton("热力图", 3);
-                AddSidebarButton("WEB", 4); // [Member E] Added: Entry for Web Mode
-                AddSidebarButton("返回", 5); // 紧跟在后面
+                AddSidebarButton("游览", 4);
+                AddSidebarButton("WEB", 5);
+                AddSidebarButton("返回", 6);
 
                 _splitContainerVisual = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Horizontal, BorderStyle = BorderStyle.FixedSingle };
                 _splitContainerVisual.SplitterDistance = (int)(tabPageVisual.Height * 0.7);
@@ -108,14 +109,29 @@ namespace WindowsFormsMap1
                 _panelMapToolbar = new Panel { Height = 45, Dock = DockStyle.Top, BackColor = Color.White, Padding = new Padding(5) };
                 AddMapNavigationButtons();
 
+                // [New] Init Layout Toolbar & Search
+                InitLayoutToolbar();
+                InitSearchPanel();
+                mapContainer.Controls.Add(_panelSearch);
+                _panelSearch.BringToFront();
+
                 axMapControlVisual.Parent = null;
                 axMapControlVisual.Dock = DockStyle.Fill;
 
-                // [Fix] Add toolbar first to ensure it takes the Top dock space correctly, 
-                // then map fills the rest. Or explicitly use BringToFront.
+                // [Agent Add] Initialize Dynamic PageLayoutControl
+                _axPageLayoutVisual = new ESRI.ArcGIS.Controls.AxPageLayoutControl();
+                ((System.ComponentModel.ISupportInitialize)(this._axPageLayoutVisual)).BeginInit();
+                _axPageLayoutVisual.Dock = DockStyle.Fill;
+                _axPageLayoutVisual.Visible = false;
+
                 mapContainer.Controls.Add(_panelMapToolbar);
+                mapContainer.Controls.Add(_panelLayoutToolbar);
                 mapContainer.Controls.Add(axMapControlVisual);
-                _panelMapToolbar.BringToFront(); // Double insurance
+                mapContainer.Controls.Add(_axPageLayoutVisual);
+                ((System.ComponentModel.ISupportInitialize)(this._axPageLayoutVisual)).EndInit();
+
+                _panelMapToolbar.BringToFront();
+                if (_panelLayoutToolbar != null) _panelLayoutToolbar.BringToFront();
 
                 _splitContainerVisual.Panel1.Controls.Add(mapContainer);
 
@@ -125,7 +141,6 @@ namespace WindowsFormsMap1
                     _dashboardForm = new FormChart();
                     _dashboardForm.SetMainForm(this);
                 }
-                // [Fix] 每次初始化布局都重新绑定当前地图控件（处理演示/专业模式切换）
                 _dashboardForm.SetMapControl(axMapControlVisual);
 
                 _dashboardForm.TopLevel = false;
@@ -134,14 +149,13 @@ namespace WindowsFormsMap1
                 _dashboardForm.Visible = true;
                 _splitContainerVisual.Panel2.Controls.Add(_dashboardForm);
 
-                // 4. 安全组装 (修复：Controls.Clear() 会删掉 EagleEye)
+                // 4. 安全组装
                 _panelMainContent.Controls.Add(_splitContainerVisual);
 
-                // [Member B] Added: 绑定地图事件监听器，实现全自动图表联动
                 axMapControlVisual.OnMapReplaced += (s, ev) =>
                 {
                     if (_dashboardForm != null && !_dashboardForm.IsDisposed)
-                        _dashboardForm.UpdateChartData(_dashboardYear); // 定义一个字段记录当前年份
+                        _dashboardForm.UpdateChartData(_dashboardYear);
                 };
 
                 // 备份鹰眼面板
@@ -153,7 +167,6 @@ namespace WindowsFormsMap1
                 tabPageVisual.Controls.Add(_panelMainContent);
                 tabPageVisual.Controls.Add(_panelSidebar);
 
-                // 还原鹰眼并置顶
                 if (eagleBackup != null)
                 {
                     tabPageVisual.Controls.Add(eagleBackup);
@@ -164,12 +177,24 @@ namespace WindowsFormsMap1
             }
             finally
             {
-                // [Optimization] 恢复布局逻辑
                 this.ResumeLayout(true);
             }
         }
 
-        // [Member E] 新增：演示模式集成导航工具
+        private bool _isVisualLayoutInitialized = false;
+        private SplitContainer _splitContainerVisual;
+        private Panel _panelMapToolbar;
+
+        private Panel _panelLayoutToolbar; // [New] Dedicated Layout Toolbar
+
+        private Panel _panelSearch; // [Agent Add] Floating Search Panel
+        private TextBox _txtVisualSearch;
+        private Panel _panelResultList; // [New] Floating Result List Panel
+        private ListBox _lstResults;
+        private FormTourRoutes _tourRoutesForm; // [Agent Add]
+        private bool _isHeatmapActive = false; // [Agent Add] Track heatmap state
+
+        // [Member E] 新增：演示模式集成导航工具 (支持双视图智能切换)
         private void AddMapNavigationButtons()
         {
             // 1. 指针 (恢复默认状态)
@@ -180,7 +205,7 @@ namespace WindowsFormsMap1
                 axMapControlVisual.MousePointer = esriControlsMousePointer.esriPointerArrow;
             };
 
-            // 2. 识别 (自定义识别)
+            // 2. 识别 (自定义识别 - 仅限地图模式)
             var btnIdentify = CreateNavIconBtn("Identify", "属性识别");
             btnIdentify.Click += (s, e) =>
             {
@@ -200,32 +225,36 @@ namespace WindowsFormsMap1
             var btnPan = CreateNavIconBtn("Pan", "漫游");
             btnPan.Click += (s, e) =>
             {
-                ICommand cmd = new ControlsMapPanToolClass();
+                ESRI.ArcGIS.SystemUI.ICommand cmd = new ESRI.ArcGIS.Controls.ControlsMapPanToolClass();
                 cmd.OnCreate(axMapControlVisual.Object);
-                axMapControlVisual.CurrentTool = cmd as ITool;
+                axMapControlVisual.CurrentTool = cmd as ESRI.ArcGIS.SystemUI.ITool;
             };
 
             // 4. 放大
             var btnZoomIn = CreateNavIconBtn("ZoomIn", "放大");
             btnZoomIn.Click += (s, e) =>
             {
-                ICommand cmd = new ControlsMapZoomInToolClass();
+                ESRI.ArcGIS.SystemUI.ICommand cmd = new ESRI.ArcGIS.Controls.ControlsMapZoomInToolClass();
                 cmd.OnCreate(axMapControlVisual.Object);
-                axMapControlVisual.CurrentTool = cmd as ITool;
+                axMapControlVisual.CurrentTool = cmd as ESRI.ArcGIS.SystemUI.ITool;
             };
 
             // 5. 缩小
             var btnZoomOut = CreateNavIconBtn("ZoomOut", "缩小");
             btnZoomOut.Click += (s, e) =>
             {
-                ICommand cmd = new ControlsMapZoomOutToolClass();
+                ESRI.ArcGIS.SystemUI.ICommand cmd = new ESRI.ArcGIS.Controls.ControlsMapZoomOutToolClass();
                 cmd.OnCreate(axMapControlVisual.Object);
-                axMapControlVisual.CurrentTool = cmd as ITool;
+                axMapControlVisual.CurrentTool = cmd as ESRI.ArcGIS.SystemUI.ITool;
             };
 
             // 6. 全图
             var btnFull = CreateNavIconBtn("Full", "全图显示");
-            btnFull.Click += (s, e) => { axMapControlVisual.Extent = axMapControlVisual.FullExtent; axMapControlVisual.ActiveView.Refresh(); };
+            btnFull.Click += (s, e) =>
+            {
+                axMapControlVisual.Extent = axMapControlVisual.FullExtent;
+                axMapControlVisual.ActiveView.Refresh();
+            };
 
             // 7. 清除 (清除高亮选择)
             var btnClear = CreateNavIconBtn("Clear", "清除选择");
@@ -296,7 +325,8 @@ namespace WindowsFormsMap1
             string iconType = "Full";
             if (text == "热力图") iconType = "Heatmap";
             else if (text == "分类") iconType = "Mapping";
-            else if (text == "地市") iconType = "Query";
+            else if (text == "搜索") iconType = "Search"; // [Modified]
+            else if (text == "游览") iconType = "Navigation"; // 复用 Navigation 图标
             else if (text == "返回") iconType = "Back";
             else if (text == "全景") iconType = "Full";
             else if (text == "WEB") iconType = "Web"; // [Member E] Added: Web icon mapping
@@ -317,12 +347,41 @@ namespace WindowsFormsMap1
             _panelSidebar.Controls.Add(btn);
         }
 
+        // [Member E] Switch to Data View (Hide Layout Control)
+        private void SwitchToDataView()
+        {
+            if (_axPageLayoutVisual != null) _axPageLayoutVisual.Visible = false;
+            if (_panelLayoutToolbar != null) _panelLayoutToolbar.Visible = false;
+
+            if (axMapControlVisual != null) axMapControlVisual.Visible = true;
+            if (_panelMapToolbar != null) _panelMapToolbar.Visible = true;
+        }
+
+        // [Member E] Switch to Layout View (Show Layout Control)
+        private void SwitchToLayoutView()
+        {
+            if (axMapControlVisual != null) axMapControlVisual.Visible = false;
+            if (_panelMapToolbar != null) _panelMapToolbar.Visible = false;
+
+            if (_axPageLayoutVisual != null) _axPageLayoutVisual.Visible = true;
+            if (_panelLayoutToolbar != null) _panelLayoutToolbar.Visible = true;
+        }
+
+        // ... existing code ...
+
         /// <summary>
         /// [Member E] 新增：侧边栏导航路由逻辑
+        /// </summary>
         private void SidebarBtn_Click(object sender, EventArgs e)
         {
             Button btn = sender as Button;
             if (btn == null) return;
+
+            // [Agent] Ensure we are in Data View by default unless "Classification" switches it
+            if (btn.Text != "分类")
+            {
+                SwitchToDataView();
+            }
 
             // 1. 高亮当前选中按钮
             foreach (Control c in _panelSidebar.Controls)
@@ -336,6 +395,20 @@ namespace WindowsFormsMap1
             btn.BackColor = System.Drawing.Color.LightSkyBlue; // 浅色背景下的高亮色
             btn.ForeColor = System.Drawing.Color.MidnightBlue;
 
+            // [Agent Fix] Auto-close Search UI when switching modes
+            if (btn.Text != "搜索")
+            {
+                if (_panelSearch != null) _panelSearch.Visible = false;
+                if (_panelResultList != null) _panelResultList.Visible = false;
+            }
+
+            // [Agent Fix] Auto-reset Heatmap when switching modes
+            if (btn.Text != "热力图" && _isHeatmapActive)
+            {
+                ResetRenderer();
+                _isHeatmapActive = false;
+            }
+
             // 2. 根据按钮切换视图逻辑
             switch (btn.Text)
             {
@@ -344,15 +417,24 @@ namespace WindowsFormsMap1
                     axMapControlVisual.Extent = axMapControlVisual.FullExtent;
                     break;
                 case "分类":
-                    // [Member E] 专题图：按类别一键渲染
-                    ApplyCategoryRenderer();
+                    // [Member E] 专题图：按类别弹出菜单选择
+                    ShowCategoryMenu(btn);
                     break;
-                case "地市":
-                    // 弹出地市选择列表或触发图表联动
-                    if (_dashboardForm != null)
+                case "搜索":
+                    // [Agent Upgrade] 切换搜索面板可见性
+                    if (_panelSearch != null)
                     {
-                        _dashboardForm.Visible = true;
-                        _dashboardForm.BringToFront();
+                        SwitchToDataView(); // 确保在地图模式
+                        _panelSearch.Visible = !_panelSearch.Visible;
+                        if (_panelSearch.Visible)
+                        {
+                            _txtVisualSearch.Focus();
+                        }
+                        else
+                        {
+                            // Close result list if search panel is closed
+                            if (_panelResultList != null) _panelResultList.Visible = false;
+                        }
                     }
                     break;
                 case "演变":
@@ -363,6 +445,10 @@ namespace WindowsFormsMap1
                     // [New] 进入时空热力图模式
                     EnterHeatmapMode();
                     break;
+                case "游览":
+                    // [Agent Add] 推荐游览路线
+                    ShowTourRoutes();
+                    break;
                 case "返回":
                     tabControl1.SelectedIndex = 0;
                     break;
@@ -371,22 +457,672 @@ namespace WindowsFormsMap1
                     break;
             }
 
-            // 处理时间轴与热力图状态归一化
-            if (btn.Text == "热力图")
+            // ... (rest of the method) ...
+        }
+
+        // [Refactored] 初始化布局视图的独立工具栏
+        private void InitLayoutToolbar()
+        {
+            _panelLayoutToolbar = new Panel
             {
-                _isHeatmapMode = true;
-                EnterHeatmapMode();
+                Height = 32, // Slimmer than main toolbar (45)
+                Dock = DockStyle.Top,
+                BackColor = Color.AliceBlue,
+                Padding = new Padding(2),
+                Visible = false // Hidden by default
+            };
+
+            // 1. Pan
+            var btnPan = CreateNavIconBtn("Pan", "漫游");
+            btnPan.Size = new Size(28, 28); // Smaller buttons
+            btnPan.Click += (s, e) =>
+            {
+                ESRI.ArcGIS.SystemUI.ICommand cmd = new ESRI.ArcGIS.Controls.ControlsPagePanToolClass();
+                cmd.OnCreate(_axPageLayoutVisual.Object);
+                _axPageLayoutVisual.CurrentTool = cmd as ESRI.ArcGIS.SystemUI.ITool;
+            };
+
+            // 2. Zoom In
+            var btnZoomIn = CreateNavIconBtn("ZoomIn", "放大/框选");
+            btnZoomIn.Size = new Size(28, 28);
+            btnZoomIn.Click += (s, e) =>
+            {
+                ESRI.ArcGIS.SystemUI.ICommand cmd = new ESRI.ArcGIS.Controls.ControlsPageZoomInToolClass();
+                cmd.OnCreate(_axPageLayoutVisual.Object);
+                _axPageLayoutVisual.CurrentTool = cmd as ESRI.ArcGIS.SystemUI.ITool;
+            };
+
+            // 3. Zoom Out
+            var btnZoomOut = CreateNavIconBtn("ZoomOut", "缩小");
+            btnZoomOut.Size = new Size(28, 28);
+            btnZoomOut.Click += (s, e) =>
+            {
+                ESRI.ArcGIS.SystemUI.ICommand cmd = new ESRI.ArcGIS.Controls.ControlsPageZoomOutToolClass();
+                cmd.OnCreate(_axPageLayoutVisual.Object);
+                _axPageLayoutVisual.CurrentTool = cmd as ESRI.ArcGIS.SystemUI.ITool;
+            };
+
+            // 4. Full Page
+            var btnFull = CreateNavIconBtn("Full", "整页显示");
+            btnFull.Size = new Size(28, 28);
+            btnFull.Click += (s, e) =>
+            {
+                _axPageLayoutVisual.ZoomToWholePage();
+            };
+
+            _panelLayoutToolbar.Controls.Add(btnPan);
+            _panelLayoutToolbar.Controls.Add(btnZoomIn);
+            _panelLayoutToolbar.Controls.Add(btnZoomOut);
+            _panelLayoutToolbar.Controls.Add(btnFull);
+
+            int left = 5;
+            foreach (Control ctrl in _panelLayoutToolbar.Controls)
+            {
+                ctrl.Left = left;
+                ctrl.Top = 2;
+                left += ctrl.Width + 5;
             }
-            else if (btn.Text != "返回")
+        }
+
+        // [Member E] Display Context Menu for Thematic Maps
+        private void ShowCategoryMenu(Button btn)
+        {
+            ContextMenuStrip menu = new ContextMenuStrip();
+
+            // Add menu items with click handlers (using the layout-supporting LoadThematicMap)
+            menu.Items.Add("山东省非遗分布专题图", null, (s, e) => LoadThematicMap("山东省非遗分布专题图", "山东省非遗分布专题图.mxd"));
+            menu.Items.Add("山东省非遗曲艺分布专题图", null, (s, e) => LoadThematicMap("山东省非遗曲艺分布专题图", "山东省曲艺非遗分布专题图.mxd", "ARCGIS"));
+            menu.Items.Add("山东省美食非遗分布专题图", null, (s, e) => LoadThematicMap("山东省美食非遗分布专题图", "山东非遗.mxd"));
+
+            // Show at button location
+            menu.Show(btn, new System.Drawing.Point(btn.Width, 0));
+        }
+
+        private void LoadThematicMap(string folderName, string mxdName, string subFolder = "")
+        {
+            try
             {
-                _isHeatmapMode = false;
-                if (btn.Text == "全景") ResetRenderer();
+                // 1. Try to find the root data directory "山东省arcgis处理数据及底图"
+                string rootDataDir = FindDataRootDirectory("山东省arcgis处理数据及底图");
+
+                if (string.IsNullOrEmpty(rootDataDir))
+                {
+                    MessageBox.Show("未找到数据根目录: 山东省arcgis处理数据及底图", "路径错误");
+                    return;
+                }
+
+                // 2. Construct full path
+                string fullPath = System.IO.Path.Combine(rootDataDir, folderName);
+                if (!string.IsNullOrEmpty(subFolder))
+                {
+                    fullPath = System.IO.Path.Combine(fullPath, subFolder);
+                }
+                fullPath = System.IO.Path.Combine(fullPath, mxdName);
+
+                // 3. Load Map into PageLayoutControl
+                if (System.IO.File.Exists(fullPath))
+                {
+                    // [Agent] Switch to Layout View before loading
+                    SwitchToLayoutView();
+
+                    _axPageLayoutVisual.LoadMxFile(fullPath);
+                    _axPageLayoutVisual.ZoomToWholePage(); // [Fix] Ensure map fills the control
+                    _axPageLayoutVisual.ActiveView.Refresh();
+                }
+                else
+                {
+                    MessageBox.Show($"文件不存在: {fullPath}", "加载失败");
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("加载专题图出错: " + ex.Message);
+            }
+        }
+
+        // [Agent Add] Initialize Stylish Floating Search Panel
+        private void InitSearchPanel()
+        {
+            _panelSearch = new Panel
+            {
+                Size = new Size(320, 70), // Increased height for instructions
+                Location = new System.Drawing.Point(20, 60),
+                BackColor = Color.White,
+                Visible = false,
+                Anchor = AnchorStyles.Top | AnchorStyles.Left
+            };
+            _panelSearch.Paint += (s, e) => { ControlPaint.DrawBorder(e.Graphics, _panelSearch.ClientRectangle, Color.LightGray, ButtonBorderStyle.Solid); };
+
+            Label lblHint = new Label
+            {
+                Text = "支持搜索：地市名称(如:济南) 或 非遗名称(如:皮影)\n回车或点击按钮开始",
+                Location = new System.Drawing.Point(10, 38),
+                AutoSize = true,
+                ForeColor = Color.Gray,
+                Font = new Font("微软雅黑", 8F)
+            };
+
+            _txtVisualSearch = new TextBox
+            {
+                Location = new System.Drawing.Point(10, 10),
+                Width = 220,
+                BorderStyle = BorderStyle.FixedSingle, // FixedSingle for better visibility
+                Font = new Font("微软雅黑", 10F),
+                Text = "输入地市或非遗名称..."
+            };
+
+            _txtVisualSearch.GotFocus += (s, e) => { if (_txtVisualSearch.Text == "输入地市或非遗名称...") { _txtVisualSearch.Text = ""; _txtVisualSearch.ForeColor = Color.Black; } };
+            _txtVisualSearch.LostFocus += (s, e) => { if (string.IsNullOrWhiteSpace(_txtVisualSearch.Text)) { _txtVisualSearch.Text = "输入地市或非遗名称..."; _txtVisualSearch.ForeColor = Color.Gray; } };
+            _txtVisualSearch.KeyDown += (s, e) => { if (e.KeyCode == Keys.Enter) PerformVisualSearch(_txtVisualSearch.Text); };
+
+            Button btnGo = new Button
+            {
+                Text = "搜索",
+                Location = new System.Drawing.Point(240, 8),
+                Size = new Size(70, 26),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = ThemeEngine.ColorPrimary,
+                ForeColor = Color.White,
+                Cursor = Cursors.Hand
+            };
+            btnGo.FlatAppearance.BorderSize = 0;
+            btnGo.Click += (s, e) => PerformVisualSearch(_txtVisualSearch.Text);
+
+            _panelSearch.Controls.Add(_txtVisualSearch);
+            _panelSearch.Controls.Add(btnGo);
+            _panelSearch.Controls.Add(lblHint);
+        }
+
+        // [New] Show Search Results in Floating List
+        private void ShowSearchResults(List<string> items, string title)
+        {
+            if (_panelResultList == null)
+            {
+                _panelResultList = new Panel
+                {
+                    Size = new Size(250, 300),
+                    Location = new System.Drawing.Point(20, 140), // Below search panel
+                    BackColor = Color.White,
+                    Anchor = AnchorStyles.Top | AnchorStyles.Left,
+                    Visible = false
+                };
+                _panelResultList.Paint += (s, e) => ControlPaint.DrawBorder(e.Graphics, _panelResultList.ClientRectangle, ThemeEngine.ColorPrimary, ButtonBorderStyle.Solid);
+
+                Label lblTitle = new Label { Text = "搜索结果", Dock = DockStyle.Top, Height = 30, TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(5, 0, 0, 0), Font = new Font("微软雅黑", 9, FontStyle.Bold), BackColor = ThemeEngine.ColorSecondary };
+
+                Button btnClose = new Button { Text = "×", Dock = DockStyle.Right, Width = 30, FlatStyle = FlatStyle.Flat, ForeColor = Color.Red };
+                btnClose.FlatAppearance.BorderSize = 0;
+                btnClose.Click += (s, e) => _panelResultList.Visible = false;
+                lblTitle.Controls.Add(btnClose);
+
+                _lstResults = new ListBox { Dock = DockStyle.Fill, BorderStyle = BorderStyle.None, Font = new Font("微软雅黑", 9), ItemHeight = 20 };
+
+                _panelResultList.Controls.Add(_lstResults);
+                _panelResultList.Controls.Add(lblTitle);
+
+                // Add to map container if not present
+                if (_panelSearch.Parent != null && !_panelSearch.Parent.Controls.Contains(_panelResultList))
+                {
+                    _panelSearch.Parent.Controls.Add(_panelResultList);
+                    _panelResultList.BringToFront();
+                }
             }
 
-            // [Fix] 切换后通过统一年份同步一次地图
-            FilterMapByYear(_dashboardYear);
+            _lstResults.Items.Clear();
+            if (items == null || items.Count == 0)
+            {
+                _lstResults.Items.Add("未找到相关结果");
+            }
+            else
+            {
+                foreach (var item in items) _lstResults.Items.Add(item);
+            }
 
-            axMapControlVisual.ActiveView.Refresh();
+            // Update Title
+            (_panelResultList.Controls[1] as Label).Text = title; // Index 1 is title label because ListBox added first? No, ListBox Dock Fill, Label Dock Top. Controls collection order depends on Add.
+            // Actually careful with index. Let's just find it.
+            foreach (Control c in _panelResultList.Controls) if (c is Label) c.Text = title;
+
+            _panelResultList.Visible = true;
+            _panelResultList.BringToFront();
+        }
+
+        // [Agent Add] Core Layout Search Logic
+        private void PerformVisualSearch(string keyword)
+        {
+            if (string.IsNullOrWhiteSpace(keyword) || keyword.Contains("输入地市")) return;
+
+            try
+            {
+                this.Cursor = Cursors.WaitCursor;
+                axMapControlVisual.Map.ClearSelection();
+                axMapControlVisual.ActiveView.GraphicsContainer.DeleteAllElements();
+
+                bool found = false;
+                List<string> resultNames = new List<string>();
+
+                // Strategy 1: Search City (Region)
+                IFeatureLayer cityLayer = null;
+                for (int i = 0; i < axMapControlVisual.LayerCount; i++)
+                {
+                    ILayer l = axMapControlVisual.get_Layer(i);
+                    // [Fix] User specified layer name "shiqu"
+                    if ((l.Name.Contains("shiqu") || l.Name.Contains("地市") || l.Name.Contains("行政")) && l is IFeatureLayer fl && fl.FeatureClass.ShapeType == esriGeometryType.esriGeometryPolygon)
+                    {
+                        cityLayer = fl;
+                        break;
+                    }
+                }
+
+                if (cityLayer != null)
+                {
+                    IQueryFilter qf = new QueryFilterClass();
+                    // [Fix] User specified: City layer is "shiqu", Field is "行政名"
+                    string nameField = "行政名";
+                    if (cityLayer.FeatureClass.Fields.FindField("行政名") == -1)
+                    {
+                        if (cityLayer.FeatureClass.Fields.FindField("Name") != -1) nameField = "Name";
+                    }
+
+                    qf.WhereClause = $"{nameField} LIKE '%{keyword}%'";
+
+                    IFeatureCursor cursor = cityLayer.Search(qf, false);
+                    IFeature cityFeature = cursor.NextFeature(); // Only take first city match
+                    if (cityFeature != null)
+                    {
+                        found = true;
+                        // Zoom to city
+                        axMapControlVisual.Extent = cityFeature.Shape.Envelope;
+                        axMapControlVisual.FlashShape(cityFeature.Shape, 1, 300, null);
+
+                        // [Agent Add] Highlight "shiqujie" (City Boundary) if exists
+                        IFeatureLayer boundLayer = null;
+                        for (int i = 0; i < axMapControlVisual.LayerCount; i++)
+                        {
+                            ILayer l = axMapControlVisual.get_Layer(i);
+                            if (l.Name.Contains("shiqujie") || l.Name.Contains("界"))
+                            {
+                                boundLayer = l as IFeatureLayer;
+                                break;
+                            }
+                        }
+
+                        if (boundLayer != null)
+                        {
+                            // [Defense] Check if field exists before setting WhereClause
+                            bool fieldFound = false;
+                            string boundField = "行政名";
+                            if (boundLayer.FeatureClass.Fields.FindField("行政名") != -1)
+                            {
+                                boundField = "行政名";
+                                fieldFound = true;
+                            }
+                            else if (boundLayer.FeatureClass.Fields.FindField("Name") != -1)
+                            {
+                                boundField = "Name";
+                                fieldFound = true;
+                            }
+
+                            if (fieldFound)
+                            {
+                                try
+                                {
+                                    IQueryFilter qfBound = new QueryFilterClass();
+                                    qfBound.WhereClause = $"{boundField} LIKE '%{keyword}%'";
+
+                                    IFeatureSelection boundSel = boundLayer as IFeatureSelection;
+                                    if (boundSel != null)
+                                    {
+                                        boundSel.SelectFeatures(qfBound, esriSelectionResultEnum.esriSelectionResultAdd, false);
+                                    }
+                                }
+                                catch { /* Ignore boundary highlight errors to correct main search */ }
+                            }
+                        }
+
+                        // Select all ICH points inside this city
+                        IFeatureLayer ichLayer = null;
+                        for (int i = 0; i < axMapControlVisual.LayerCount; i++)
+                        {
+                            ILayer l = axMapControlVisual.get_Layer(i);
+                            // [Fix] User specified layer name "山东国家级非遗项目"
+                            if (l.Name.Contains("山东国家级非遗项目") || l.Name.Contains("非遗")) { ichLayer = l as IFeatureLayer; break; }
+                        }
+
+                        if (ichLayer != null)
+                        {
+                            ISpatialFilter sf = new SpatialFilterClass();
+                            sf.Geometry = cityFeature.Shape;
+                            sf.SpatialRel = esriSpatialRelEnum.esriSpatialRelContains;
+
+                            // [Fix] Correctly use IFeatureSelection to select features
+                            IFeatureSelection featureSelection = ichLayer as IFeatureSelection;
+                            if (featureSelection != null)
+                            {
+                                featureSelection.SelectFeatures(sf, esriSelectionResultEnum.esriSelectionResultNew, false);
+                                axMapControlVisual.ActiveView.PartialRefresh(esriViewDrawPhase.esriViewGeoSelection, null, null);
+
+                                // [New] Collect names for valid list
+                                try
+                                {
+                                    ISelectionSet selSet = featureSelection.SelectionSet;
+                                    if (selSet.Count > 0)
+                                    {
+                                        ICursor selCursor;
+                                        selSet.Search(null, true, out selCursor);
+                                        IFeature selFeat;
+                                        int idxName = ichLayer.FeatureClass.Fields.FindField("名称");
+                                        if (idxName == -1) idxName = ichLayer.FeatureClass.Fields.FindField("项目名称");
+
+                                        while ((selFeat = selCursor.NextRow() as IFeature) != null)
+                                        {
+                                            if (idxName != -1) resultNames.Add(selFeat.get_Value(idxName).ToString());
+                                            else resultNames.Add("项目ID:" + selFeat.OID);
+                                        }
+                                    }
+                                }
+                                catch { /* Ignore list generation errors */ }
+                            }
+                        }
+
+                        string cityName = cityFeature.get_Value(cityLayer.FeatureClass.Fields.FindField(nameField)).ToString();
+                        ShowSearchResults(resultNames, $"在 {cityName} 发现 {resultNames.Count} 个项目");
+                    }
+                    System.Runtime.InteropServices.Marshal.ReleaseComObject(cursor);
+                }
+
+                // Strategy 2: If not city, search for Spot Name
+                if (!found)
+                {
+                    IFeatureLayer ichLayer = null;
+                    for (int i = 0; i < axMapControlVisual.LayerCount; i++)
+                    {
+                        ILayer l = axMapControlVisual.get_Layer(i);
+                        // [Fix] User specified layer name "山东国家级非遗项目"
+                        if (l.Name.Contains("山东国家级非遗项目") || l.Name.Contains("非遗")) { ichLayer = l as IFeatureLayer; break; }
+                    }
+
+                    if (ichLayer != null)
+                    {
+                        // [Fix] User specified field is "名称"
+                        string nameField = "名称";
+                        if (ichLayer.FeatureClass.Fields.FindField("名称") == -1)
+                        {
+                            if (ichLayer.FeatureClass.Fields.FindField("Name") != -1) nameField = "Name";
+                            else if (ichLayer.FeatureClass.Fields.FindField("项目名称") != -1) nameField = "项目名称";
+                        }
+
+                        IQueryFilter qf = new QueryFilterClass();
+                        qf.WhereClause = $"{nameField} LIKE '%{keyword}%'";
+
+                        // [Fix] Search all matches
+                        IFeatureCursor cursor = ichLayer.Search(qf, false);
+                        IFeature spotFeature;
+                        IEnvelope unionEnv = null;
+
+                        IFeatureSelection featureSelection = ichLayer as IFeatureSelection;
+                        if (featureSelection != null) featureSelection.Clear(); // Clear previous
+
+                        while ((spotFeature = cursor.NextFeature()) != null)
+                        {
+                            found = true;
+                            resultNames.Add(spotFeature.get_Value(ichLayer.FeatureClass.Fields.FindField(nameField)).ToString());
+
+                            // Highlight
+                            axMapControlVisual.Map.SelectFeature(ichLayer, spotFeature);
+
+                            // Union Extent
+                            if (unionEnv == null) unionEnv = spotFeature.Shape.Envelope;
+                            else unionEnv.Union(spotFeature.Shape.Envelope);
+                        }
+                        System.Runtime.InteropServices.Marshal.ReleaseComObject(cursor);
+
+                        if (found)
+                        {
+                            if (unionEnv != null)
+                            {
+                                unionEnv.Expand(1.5, 1.5, true);
+                                // Limit zoom out if too scattered? standard expand is ok.
+                                axMapControlVisual.Extent = unionEnv;
+                            }
+                            ShowSearchResults(resultNames, $"找到 {resultNames.Count} 个相关项目");
+                        }
+                    }
+                }
+
+                if (!found)
+                {
+                    MessageBox.Show("未找到与“" + keyword + "”相关的地市或景点。", "搜索结果");
+                }
+
+                axMapControlVisual.ActiveView.Refresh();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("搜索出错: " + ex.Message);
+            }
+            finally
+            {
+                this.Cursor = Cursors.Default;
+            }
+        }
+
+        // [Agent Add] 显示游览路线窗口
+        private void ShowTourRoutes()
+        {
+            try
+            {
+                this.Cursor = Cursors.WaitCursor;
+
+                // 1. 查找关键图层
+                IFeatureLayer ichLayer = null;
+                IFeatureLayer cityLayer = null;
+                List<IFeatureLayer> lineLayers = new List<IFeatureLayer>();
+
+                for (int i = 0; i < axMapControlVisual.LayerCount; i++)
+                {
+                    ILayer l = axMapControlVisual.get_Layer(i);
+                    if (l is IFeatureLayer fl)
+                    {
+                        string name = fl.Name.ToLower();
+                        if (name.Contains("非遗") || name.Contains("项目")) ichLayer = fl;
+
+                        // Collect all line layers for road selection
+                        if (fl.FeatureClass.ShapeType == esriGeometryType.esriGeometryPolyline)
+                        {
+                            lineLayers.Add(fl);
+                        }
+
+                        // [Agent] Find City Layer
+                        if ((name.Contains("city") || name.Contains("地市") || name.Contains("行政") || name.Contains("shiqu") || name.Contains("boundary")) && fl.FeatureClass.ShapeType == esriGeometryType.esriGeometryPolygon)
+                        {
+                            if (!name.Contains("label") && !name.Contains("anno")) // Exclude annotation layers
+                                cityLayer = fl;
+                        }
+                    }
+                }
+
+                this.Cursor = Cursors.Default;
+
+                // 2. 展示窗口
+                if (_tourRoutesForm == null || _tourRoutesForm.IsDisposed)
+                {
+                    _tourRoutesForm = new FormTourRoutes(this, cityLayer, lineLayers, ichLayer);
+                }
+                _tourRoutesForm.Show();
+                _tourRoutesForm.Activate();
+            }
+            catch (Exception ex)
+            {
+                this.Cursor = Cursors.Default;
+                MessageBox.Show("打开路线窗口失败: " + ex.Message);
+            }
+        }
+
+        // [Agent Add] 在地图上展示特定路线 (由 FormTourRoutes 调用)
+        public void DisplayTourRoute(AnalysisHelper.TourRoute route)
+        {
+            if (route == null) return;
+
+            axMapControlVisual.Map.ClearSelection();
+            axMapControlVisual.ActiveView.GraphicsContainer.DeleteAllElements();
+
+            // 1. 高亮路线点
+            IFeatureLayer ichLayer = null;
+
+            // 尝试根据点位数据的来源类查找图层 (更准确)
+            if (route.Points != null && route.Points.Count > 0)
+            {
+                IFeatureClass ptClass = route.Points[0].Class as IFeatureClass;
+                for (int i = 0; i < axMapControlVisual.LayerCount; i++)
+                {
+                    ILayer l = axMapControlVisual.get_Layer(i);
+                    if (l is IFeatureLayer fl && fl.FeatureClass != null && fl.FeatureClass == ptClass)
+                    {
+                        ichLayer = fl;
+                        break;
+                    }
+                }
+            }
+
+            // 如果没找到 (或者没点)，回退到按名字找
+            if (ichLayer == null)
+            {
+                for (int i = 0; i < axMapControlVisual.LayerCount; i++)
+                {
+                    ILayer l = axMapControlVisual.get_Layer(i);
+                    if (l.Name.Contains("非遗") || l.Name.Contains("项目"))
+                    {
+                        ichLayer = l as IFeatureLayer;
+                        break;
+                    }
+                }
+            }
+
+            if (ichLayer != null && route.Points != null && route.Points.Count > 0)
+            {
+                IGeoFeatureLayer gfl = ichLayer as IGeoFeatureLayer;
+                if (gfl != null)
+                {
+                    // 构造选择集 (使用 Add 而非 SelectFeatures，避免 SQL 长度限制导致的 crash)
+                    IFeatureSelection fs = gfl as IFeatureSelection;
+                    fs.Clear();
+                    ISelectionSet selSet = fs.SelectionSet;
+
+                    foreach (var pt in route.Points)
+                    {
+                        selSet.Add(pt.OID);
+                    }
+
+                    // 注意：不需要调用 SelectFeatures，直接操作 SelectionSet 即可
+                    // 视图刷新在方法最后统一处理
+                }
+            }
+
+            // 1.5 高亮高速路线 (新增需求)
+            if (route.RoadFeatures != null && route.RoadFeatures.Count > 0)
+            {
+                // 查找高速图层 (简单遍历)
+                IFeatureLayer roadLayer = null;
+                for (int i = 0; i < axMapControlVisual.LayerCount; i++)
+                {
+                    ILayer l = axMapControlVisual.get_Layer(i);
+                    // 假设高速图层名字包含 "高速" 或 "Line" 且包含 route.RoadFeatures[0] 所在的 FeatureClass
+                    if (l is IFeatureLayer fl && fl.FeatureClass != null &&
+                        fl.FeatureClass.AliasName == route.RoadFeatures[0].Class.AliasName)
+                    {
+                        roadLayer = fl;
+                        break;
+                    }
+                }
+
+                // 如果找不到精确匹配，尝试按名字找
+                if (roadLayer == null)
+                {
+                    for (int i = 0; i < axMapControlVisual.LayerCount; i++)
+                    {
+                        ILayer l = axMapControlVisual.get_Layer(i);
+                        if (l.Name.Contains("高速") && l is IFeatureLayer) { roadLayer = l as IFeatureLayer; break; }
+                    }
+                }
+
+                if (roadLayer != null)
+                {
+                    List<int> roadOids = new List<int>();
+                    foreach (var f in route.RoadFeatures) roadOids.Add(f.OID);
+
+                    if (roadOids.Count > 0)
+                    {
+                        IFeatureSelection fs = roadLayer as IFeatureSelection;
+                        // 先清空当前选择
+                        fs.Clear();
+
+                        // 批量添加到选择集 (使用循环确保稳定性，避免 WHERE 语句超长)
+                        ISelectionSet selSet = fs.SelectionSet;
+                        foreach (int oid in roadOids)
+                        {
+                            selSet.Add(oid);
+                        }
+
+                        // 刷新视图以显示选择
+                        // The partial refresh happens at end of method
+                    }
+                }
+            }
+
+            // 2. 绘制连线 (示意性)
+            // 如果 route.PathLine 为空，我们可以简单地按顺序连接点
+            IGeometry lineGeo = route.PathLine;
+            if ((lineGeo == null || lineGeo.IsEmpty) && route.Points.Count > 1)
+            {
+                IPointCollection pc = new PolylineClass();
+                foreach (var pt in route.Points)
+                {
+                    pc.AddPoint(pt.ShapeCopy as IPoint);
+                }
+                lineGeo = pc as IGeometry;
+            }
+
+            if (lineGeo != null && !lineGeo.IsEmpty)
+            {
+                // 简单绘制
+                SimpleLineSymbolClass lineSym = new SimpleLineSymbolClass();
+                // 使用高亮青色，更醒目
+                lineSym.Color = new RgbColorClass { Red = 0, Green = 255, Blue = 255 };
+                lineSym.Width = 5; // 加粗
+                lineSym.Style = esriSimpleLineStyle.esriSLSSolid; // 实线
+
+                LineElementClass le = new LineElementClass { Geometry = lineGeo, Symbol = lineSym };
+                axMapControlVisual.ActiveView.GraphicsContainer.AddElement(le, 0);
+            }
+
+            // 3. 缩放到范围
+            // 3. 缩放到范围
+            if (ichLayer != null && (ichLayer as IFeatureSelection).SelectionSet.Count > 0)
+            {
+                // 3. 缩放到范围
+                ISelectionSet selectionSet = (ichLayer as IFeatureSelection).SelectionSet;
+                ICursor cursor;
+                selectionSet.Search(null, false, out cursor);
+                IFeatureCursor featureCursor = cursor as IFeatureCursor;
+
+                IFeature f;
+                IEnvelope env = new EnvelopeClass { SpatialReference = axMapControlVisual.Map.SpatialReference };
+                bool first = true;
+                while ((f = featureCursor.NextFeature()) != null)
+                {
+                    if (first) { env = f.Extent; first = false; }
+                    else env.Union(f.Extent);
+                }
+                System.Runtime.InteropServices.Marshal.ReleaseComObject(featureCursor);
+                System.Runtime.InteropServices.Marshal.ReleaseComObject(cursor);
+
+                env.Expand(1.2, 1.2, true);
+                axMapControlVisual.Extent = env;
+            }
+
+            axMapControlVisual.ActiveView.PartialRefresh(esriViewDrawPhase.esriViewGraphics, null, null);
+            axMapControlVisual.ActiveView.PartialRefresh(esriViewDrawPhase.esriViewGeoSelection, null, null);
         }
 
         // [Member E] Modified: 修复同步逻辑，确保地图图层正确复制且不发生冲突
@@ -451,38 +1187,38 @@ namespace WindowsFormsMap1
             EnableLabelsForAllLayers();
         }
 
-        // [Member E] Added: 一键分类渲染逻辑
+
+
+        private string FindDataRootDirectory(string targetDirName)
+        {
+            string current = Application.StartupPath;
+            for (int i = 0; i < 6; i++)
+            {
+                string path = System.IO.Path.Combine(current, targetDirName);
+                // Also check if targetDirName is in a sibling folder (common in dev envs structure like '1.8/-')
+
+                // Check direct subdirectory
+                string[] dirs = System.IO.Directory.GetDirectories(current, targetDirName, System.IO.SearchOption.TopDirectoryOnly);
+                if (dirs.Length > 0) return dirs[0];
+
+                // Special case for the user structure seen: "LYF地图操作\山东省arcgis处理数据及底图"
+                string lyfPath = System.IO.Path.Combine(current, "LYF地图操作", targetDirName);
+                if (System.IO.Directory.Exists(lyfPath)) return lyfPath;
+
+                // Move up
+                var parent = System.IO.Directory.GetParent(current);
+                if (parent == null) break;
+                current = parent.FullName;
+            }
+            // Broad search for the directory if simple traversal fails? 
+            // Better to stay safe and just return null if not found near project.
+            return null;
+        }
+
+        // [Member E] Added: 一键分类渲染逻辑 (Depreciated by Menu, but kept as placeholder if needed or removed)
         private void ApplyCategoryRenderer()
         {
-            try
-            {
-                // 寻找非遗点图层
-                ESRI.ArcGIS.Carto.IFeatureLayer ichLayer = null;
-                for (int i = 0; i < axMapControlVisual.LayerCount; i++)
-                {
-                    var layer = axMapControlVisual.get_Layer(i) as ESRI.ArcGIS.Carto.IFeatureLayer;
-                    if (layer != null && layer.Name.Contains("非遗") && layer.FeatureClass.ShapeType == ESRI.ArcGIS.Geometry.esriGeometryType.esriGeometryPoint)
-                    {
-                        ichLayer = layer;
-                        break;
-                    }
-                }
-
-                if (ichLayer == null) return;
-
-                // 简单的唯一值符号化简化版 (此处可根据需要引用 SymbolizeHelper)
-                // 为演示模式预设一套精美颜色
-                string fieldName = "类别"; // 假设字段名为类别
-
-                // 检查字段是否存在
-                int fieldIndex = ichLayer.FeatureClass.Fields.FindField(fieldName);
-                if (fieldIndex == -1) return;
-
-                // 此处省略复杂的符号化核心代码，仅作为逻辑占位，实际可调用已有的模块
-                MessageBox.Show("已切换至【非遗类别】专题渲染视图", "可视化专家系统");
-                axMapControlVisual.ActiveView.Refresh();
-            }
-            catch { }
+            // Replaced by ShowCategoryMenu
         }
 
 
@@ -508,6 +1244,8 @@ namespace WindowsFormsMap1
 
             // 2. 触发初始渲染 (使用统一年份)
             RenderCityChoropleth(_dashboardYear);
+
+            _isHeatmapActive = true;
         }
 
         private void ResetRenderer()
