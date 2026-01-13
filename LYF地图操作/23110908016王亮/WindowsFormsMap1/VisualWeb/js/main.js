@@ -7,6 +7,7 @@ let categoryChart = null;
 let mapPoints = [];
 let allData = null;
 let bridge = null;
+let currentMode = 'point'; // 'point', 'choropleth', 'heatmap'
 
 const COLORS = ['#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981'];
 
@@ -21,32 +22,48 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // 3. Initialize JS-C# Bridge and Data
     if (window.chrome && window.chrome.webview) {
+        // Wait for bridge objects to be ready
         bridge = window.chrome.webview.hostObjects.bridge;
 
-        // Listen for C# push messages
+        // Listen for C# push messages (Keep as fallback/live updates)
         window.chrome.webview.addEventListener('message', (event) => {
-            console.log("Received data from C#");
-            console.log("Raw event.data:", event.data);
-
-            try {
-                const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
-
-                // Debug: show first 200 chars of received data
-                const preview = JSON.stringify(data).substring(0, 200);
-                alert("接收到数据预览:\n" + preview + "\n\n总数据点: " + (data.points ? data.points.length : 0));
-
-                renderDashboard(data);
-            } catch (err) {
-                console.error("Parse error:", err);
-                console.error("Received data:", event.data);
-                alert("数据解析错误: " + err.message + "\n\n收到的数据: " + (typeof event.data === 'string' ? event.data.substring(0, 200) : JSON.stringify(event.data).substring(0, 200)));
-            }
+            console.log("Received data from C# (Push)");
+            handleIncomingData(event.data);
         });
+
+        // [New] Active Pull: Try to get data immediately after registration
+        try {
+            console.log("Requesting initial data from bridge (Pull)...");
+            const rawData = await bridge.GetAllData();
+            if (rawData) {
+                console.log("Initial data received via pull.");
+                handleIncomingData(rawData);
+            }
+        } catch (err) {
+            console.warn("Initial bridge pull failed (maybe not ready yet), waiting for push...", err);
+        }
     } else {
         // Fallback to JSON file in standalone mode
         setTimeout(() => { if (!allData) loadFallbackData(); }, 1500);
     }
 });
+
+// [New] Centralized data handler to prevent duplication
+function handleIncomingData(dataInput) {
+    if (STATE.dataLoaded && allData) return; // Prevent double rendering on init
+
+    try {
+        const data = typeof dataInput === 'string' ? JSON.parse(dataInput) : dataInput;
+
+        // Debug: log data summary
+        console.log("Processing ICH data. Total points:", data.points ? data.points.length : 0);
+
+        renderDashboard(data);
+        STATE.dataLoaded = true;
+    } catch (err) {
+        console.error("Data parse error:", err);
+    }
+}
 
 async function initCharts() {
     // Register Shandong Map from injected data
@@ -80,6 +97,9 @@ async function initCharts() {
         chart.resize();
         categoryChart.resize();
     });
+
+    // [New] Initialize Map Click Listeners
+    initMapEvents();
 }
 
 function initInteractions() {
@@ -91,18 +111,67 @@ function initInteractions() {
     });
 
     document.getElementById('btn-zoom-in').onclick = () => {
+        handleMapAnimationStart();
         const opt = chart.getOption();
-        chart.setOption({ geo: { zoom: (opt.geo[0].zoom || 1) * 1.5 } });
+        chart.setOption({ geo: [{ zoom: (opt.geo[0].zoom || 1) * 1.5 }] });
     };
 
     document.getElementById('btn-zoom-out').onclick = () => {
+        handleMapAnimationStart();
         const opt = chart.getOption();
-        chart.setOption({ geo: { zoom: (opt.geo[0].zoom || 1) / 1.5 } });
+        chart.setOption({ geo: [{ zoom: (opt.geo[0].zoom || 1) / 1.5 }] });
     };
 
-    document.getElementById('btn-reset').onclick = () => {
-        chart.setOption({ geo: { zoom: 1, center: [118.5, 36.4] } });
-    };
+    // [New] Analysis Mode Switching
+    document.querySelectorAll('.analysis-btn').forEach(btn => {
+        btn.onclick = () => {
+            const mode = btn.dataset.mode;
+            if (currentMode === mode) return;
+
+            document.querySelector('.analysis-btn.active').classList.remove('active');
+            btn.classList.add('active');
+            currentMode = mode;
+
+            console.log("Switching to analysis mode:", mode);
+            renderMap(mapPoints);
+        };
+    });
+
+    // Reset Button
+    const btnReset = document.getElementById('btn-reset');
+    if (btnReset) {
+        btnReset.onclick = () => {
+            handleMapAnimationStart();
+            chart.setOption({
+                geo: [{ zoom: 1.1, center: [118.5, 36.4] }]
+            });
+        };
+    }
+    // Close cards overlay
+    const btnClose = document.getElementById('btn-close-cards');
+    if (btnClose) {
+        btnClose.onclick = () => {
+            document.getElementById('card-overlay').style.display = 'none';
+        };
+    }
+}
+
+// [New] 处理地图动画开始，针对热力图进行特殊处理
+function handleMapAnimationStart() {
+    if (currentMode === 'heatmap') {
+        console.log("Zooming... Hiding heatmap data for sync.");
+        // 瞬间隐藏热力图层，避免拖影
+        chart.setOption({
+            series: [{ name: '非遗密度', data: [] }]
+        });
+
+        // 延迟刷新 (ECharts 缩放动画默认约 300-500ms)
+        if (window.zoomRefreshTimer) clearTimeout(window.zoomRefreshTimer);
+        window.zoomRefreshTimer = setTimeout(() => {
+            console.log("Zoom finished. Refreshing heatmap.");
+            renderMap(mapPoints);
+        }, 500);
+    }
 }
 
 function renderDashboard(data) {
@@ -159,58 +228,62 @@ function renderCategoryChart(categories) {
 }
 
 function renderMap(points) {
-    console.log("Rendering map with points:", points.length);
+    if (!chart) return;
+    // 获取当前视野状态，防止刷新时重置缩放和中心点
+    const currentOpt = chart.getOption();
+    const currentGeo = currentOpt && currentOpt.geo && currentOpt.geo[0];
+    const targetCenter = currentGeo ? currentGeo.center : [118.5, 36.4];
+    const targetZoom = currentGeo ? currentGeo.zoom : 1.1;
 
-    chart.setOption({
+    // 基础配置模板
+    const option = {
         backgroundColor: 'transparent',
         tooltip: {
             show: true,
             trigger: 'item',
-            formatter: (p) => p.data ? `<div style="padding:10px"><b>${p.data.name}</b><br/>${p.data.value[2]}</div>` : '',
             backgroundColor: 'rgba(255,255,255,0.95)',
             borderRadius: 12,
             borderWidth: 0,
             shadowBlur: 20,
             shadowColor: 'rgba(0,0,0,0.2)',
-            textStyle: {
-                color: '#333'
-            }
+            textStyle: { color: '#333' }
         },
         geo: {
             map: 'shandong',
             roam: true,
-            center: [118.5, 36.4],
-            zoom: 1.1,
+            center: targetCenter,
+            zoom: targetZoom,
             itemStyle: {
-                // 更亮的渐变色底图
-                areaColor: {
-                    type: 'linear',
-                    x: 0,
-                    y: 0,
-                    x2: 1,
-                    y2: 1,
-                    colorStops: [
-                        { offset: 0, color: 'rgba(102, 126, 234, 0.15)' },
-                        { offset: 1, color: 'rgba(118, 75, 162, 0.15)' }
-                    ]
-                },
-                borderColor: 'rgba(102, 126, 234, 0.6)',
-                borderWidth: 2,
-                shadowColor: 'rgba(102, 126, 234, 0.3)',
-                shadowBlur: 10
+                areaColor: 'rgba(102, 126, 234, 0.05)',
+                borderColor: 'rgba(102, 126, 234, 0.4)',
+                borderWidth: 1.5
             },
             emphasis: {
                 itemStyle: {
-                    areaColor: 'rgba(102, 126, 234, 0.3)',
+                    areaColor: 'rgba(102, 126, 234, 0.1)',
                     borderColor: '#667eea',
-                    borderWidth: 3,
-                    shadowBlur: 20,
-                    shadowColor: 'rgba(102, 126, 234, 0.6)'
+                    borderWidth: 2
                 },
                 label: { show: false }
             }
         },
-        series: [{
+        visualMap: null,
+        series: [],
+        animationDurationUpdate: 300, // 设定较短的动画时间，减少刷新延迟感
+        animationEasingUpdate: 'cubicOut'
+    };
+
+    // 模式特定配置 (Mode-specific configurations)
+    if (currentMode === 'point') {
+        // 模式 📍: 点位分布 (Point Distribution)
+        option.tooltip.formatter = (p) => {
+            if (p.componentType === 'series' && p.data) {
+                return `<div style="padding:10px"><b>${p.data.name}</b><br/>${p.data.value[2]}</div>`;
+            }
+            return '';
+        };
+        option.series.push({
+            name: '项目分布',
             type: 'scatter',
             coordinateSystem: 'geo',
             data: points.map(p => ({
@@ -221,65 +294,98 @@ function renderMap(points) {
             itemStyle: {
                 color: {
                     type: 'radial',
-                    x: 0.5,
-                    y: 0.5,
-                    r: 0.5,
-                    colorStops: [
-                        { offset: 0, color: '#00d2ff' },
-                        { offset: 1, color: '#3b82f6' }
-                    ]
+                    x: 0.5, y: 0.5, r: 0.5,
+                    colorStops: [{ offset: 0, color: '#00d2ff' }, { offset: 1, color: '#3b82f6' }]
                 },
                 shadowBlur: 15,
                 shadowColor: 'rgba(59, 130, 246, 0.8)',
                 borderColor: 'rgba(255,255,255,0.3)',
                 borderWidth: 1
             },
-            emphasis: {
-                itemStyle: {
-                    scale: 1.8,
-                    color: {
-                        type: 'radial',
-                        x: 0.5,
-                        y: 0.5,
-                        r: 0.5,
-                        colorStops: [
-                            { offset: 0, color: '#ff6b6b' },
-                            { offset: 1, color: '#ee5a6f' }
-                        ]
-                    },
-                    shadowBlur: 25,
-                    shadowColor: 'rgba(255, 107, 107, 0.9)'
-                }
-            }
-        }]
-    });
+            emphasis: { itemStyle: { scale: 1.8 } }
+        });
+    }
+    else if (currentMode === 'choropleth') {
+        // 模式 🗺️: 行政区划热力图 (Choropleth Map)
+        // 归一化地市名称，确保与 GeoJSON 匹配 (通常 GeoJSON 不带“市”字)
+        const cityData = (allData ? allData.statsByCity : []).map(c => ({
+            name: c.name.replace('市', ''),
+            value: c.value
+        }));
 
-    chart.on('click', 'series', (params) => {
-        showDetail(params.name, params.value[2], params.value[3]);
-    });
+        console.log("Normalized Choropleth Data:", cityData);
 
-    // [New] Listen for map region clicks (e.g., clicking a city)
-    chart.on('click', 'geo', (params) => {
-        console.log('Clicked on region:', params.name);
-        showCityCards(params.name);
+        option.tooltip.formatter = '{b}: {c} 项项目';
+        option.visualMap = {
+            min: 0,
+            max: Math.max(...cityData.map(c => c.value), 10),
+            left: 30,
+            bottom: 30,
+            text: ['高项目量', '低'],
+            calculable: true,
+            inRange: {
+                color: ['#fff7ed', '#fdba74', '#f97316', '#ea580c', '#9a3412'] // 橙红暖色调
+            },
+            textStyle: { color: '#fff' }
+        };
+
+        option.series.push({
+            name: '地市非遗分布',
+            type: 'map',
+            map: 'shandong',
+            geoIndex: 0,
+            data: cityData
+        });
+    }
+    else if (currentMode === 'heatmap') {
+        // 模式 🔥: 密度热力图 (Density Heatmap)
+        option.visualMap = {
+            min: 0,
+            max: 3, // 降低阈值使分布更连贯
+            left: 30,
+            bottom: 30,
+            show: true,
+            text: ['高密度', '低'],
+            calculable: true,
+            inRange: {
+                // 由中心向外：透明 -> 蓝 -> 绿 -> 黄 -> 红 (核心为红)
+                color: ['rgba(0, 0, 255, 0)', 'rgba(0, 0, 255, 0.4)', 'cyan', 'lime', 'yellow', 'orange', 'red']
+            },
+            textStyle: { color: '#fff' }
+        };
+
+        option.series.push({
+            name: '非遗密度',
+            type: 'heatmap',
+            coordinateSystem: 'geo',
+            data: points.map(p => [p.x, p.y, 1]),
+            pointSize: 20, // 适度减小点尺寸以增加层次感
+            blurSize: 35   // 适度减小模糊半径以增强视觉锐度
+        });
+    }
+
+    chart.setOption(option, {
+        notMerge: true,
+        lazyUpdate: false // 强制立即更新，解决缩放不同步问题
     });
 }
 
-
 function showDetail(name, cat, city) {
-    // Hide old right sidebar detail
-    document.getElementById('detail-placeholder').style.display = 'block';
-    document.getElementById('detail-card').style.display = 'none';
+    // Hide old right sidebar detail if shown
+    const detailPlaceholder = document.getElementById('detail-placeholder');
+    const detailCard = document.getElementById('detail-card');
+    if (detailPlaceholder) detailPlaceholder.style.display = 'block';
+    if (detailCard) detailCard.style.display = 'none';
 
     // Show center card overlay
     const overlay = document.getElementById('card-overlay');
     const container = document.getElementById('card-container');
 
-    // Generate a consistent hue
+    // Generate a consistent hue based on name
     const hue = (name.length * 37) % 360;
     const gradientColors = `linear-gradient(135deg, hsl(${hue}, 60%, 60%) 0%, hsl(${hue + 40}, 60%, 40%) 100%)`;
 
-    // Create card HTML with side panel structure, wrapped in center container
+    // Create card HTML with side panel structure
     container.innerHTML = `
         <div class="card-detail-center">
             <div class="ich-card" onclick="handleCardClick(this)">
@@ -295,7 +401,6 @@ function showDetail(name, cat, city) {
                     </div>
                 </div>
                 
-                <!-- 第一次点击展开的内容 -->
                 <div class="card-expanded-content" onclick="event.stopPropagation()">
                     <div class="card-meta">
                         <span class="card-tag category">${cat}</span>
@@ -318,7 +423,6 @@ function showDetail(name, cat, city) {
                     </div>
                 </div>
 
-                <!-- 第二次点击/侧滑展开的详细内容 -->
                 <div class="card-side-panel" onclick="event.stopPropagation()">
                     <div class="side-panel-header">
                         <div class="side-panel-title">${name}</div>
@@ -353,16 +457,11 @@ function showDetail(name, cat, city) {
         </div>
     `;
 
-    overlay.style.display = 'flex';
-
-    if (bridge) {
-        loadComments(name);
-    }
+    if (overlay) overlay.style.display = 'flex';
+    if (bridge) loadComments(name);
 }
 
-// [New] Show City Cards (Slay the Spire style hand)
 function showCityCards(cityName) {
-    // Filter all ICH items from this city
     const cityDisplayName = cityName.replace('市', '');
     const cityItems = mapPoints.filter(p =>
         p.city && (p.city.includes(cityDisplayName) || cityDisplayName.includes(p.city))
@@ -376,7 +475,6 @@ function showCityCards(cityName) {
     const overlay = document.getElementById('card-overlay');
     const container = document.getElementById('card-container');
 
-    // Create card hand
     const handHtml = `
         <div class="card-hand" id="card-hand">
             ${cityItems.map((item, index) => {
@@ -406,16 +504,15 @@ function showCityCards(cityName) {
     container.innerHTML = handHtml;
     overlay.style.display = 'flex';
 
-    // Position cards with overlap effect
     setTimeout(() => {
         const cards = document.querySelectorAll('.hand-card');
         const totalCards = cards.length;
         const cardWidth = 200;
-        const overlapSpacing = 80; // Cards overlap, only show 80px of each card
+        const overlapSpacing = 80;
         const totalWidth = (totalCards - 1) * overlapSpacing + cardWidth;
-
-        // Calculate center position relative to card-hand container
         const hand = document.getElementById('card-hand');
+        if (!hand) return;
+
         const handWidth = hand.offsetWidth;
         const startX = (handWidth - totalWidth) / 2;
 
@@ -426,78 +523,44 @@ function showCityCards(cityName) {
     }, 50);
 }
 
-// [New] Handle hand card click
 let selectedCard = null;
-
 function handleHandCardClick(cardElement) {
-    // First click: select card (move to center of hand, raise up)
     if (!cardElement.classList.contains('selected')) {
-        // Deselect all other cards
-        document.querySelectorAll('.hand-card.selected').forEach(c => {
-            c.classList.remove('selected');
-        });
-
+        document.querySelectorAll('.hand-card.selected').forEach(c => c.classList.remove('selected'));
         cardElement.classList.add('selected');
         selectedCard = cardElement;
 
-        // Move to center position of the hand
         const hand = document.getElementById('card-hand');
-        const handWidth = hand.offsetWidth;
-        const centerX = (handWidth - 200) / 2; // 200 is card width
+        const centerX = (hand.offsetWidth - 200) / 2;
         cardElement.style.left = centerX + 'px';
-    }
-    // Second click: expand to full screen detail (center of screen)
-    else {
-        const name = cardElement.dataset.name;
-        const category = cardElement.dataset.category;
-        const city = cardElement.dataset.city;
-
-        // Clear hand and show full detail in screen center
-        showDetail(name, category, city);
+    } else {
+        showDetail(cardElement.dataset.name, cardElement.dataset.category, cardElement.dataset.city);
         selectedCard = null;
     }
 }
 
-
-// Close card overlay
-document.getElementById('btn-close-cards')?.addEventListener('click', () => {
-    document.getElementById('card-overlay').style.display = 'none';
-    document.getElementById('detail-placeholder').style.display = 'block';
-});
-
-// Card Click State Machine
 function handleCardClick(card) {
     if (card.classList.contains('side-open')) {
-        // Option: Click anywhere on main card to close side panel?
-        // closeSideInfo(card);
+        // Stay open or handle specific inner clicks
     } else if (card.classList.contains('expanded')) {
-        // Second click: Open side panel
         card.classList.add('side-open');
     } else {
-        // First click: Expand bottom
         card.classList.add('expanded');
     }
 }
 
-// Helper: Open Side Info
 function toggleSideInfo(btn) {
     event.stopPropagation();
-    const card = btn.closest('.ich-card');
-    card.classList.add('side-open');
+    btn.closest('.ich-card').classList.add('side-open');
 }
 
-// Helper: Close Side Info (Return to expanded)
 function closeSideInfo(btn) {
     event.stopPropagation();
-    const card = btn.tagName ? btn.closest('.ich-card') : btn;
-    card.classList.remove('side-open');
+    btn.closest('.ich-card').classList.remove('side-open');
 }
 
-
-// Like function
 function likeItem(name) {
     console.log('Liked:', name);
-    // TODO: Call bridge to record like
 }
 
 async function loadComments(itemName) {
@@ -506,6 +569,8 @@ async function loadComments(itemName) {
         const json = await bridge.GetComments(itemName);
         const comments = JSON.parse(json);
         const list = document.getElementById('comment-list');
+        if (!list) return;
+
         list.innerHTML = '';
         comments.forEach(c => {
             const d = document.createElement('div');
@@ -519,34 +584,31 @@ async function loadComments(itemName) {
 }
 
 function initActionEvents() {
-    // Like Button
-    document.getElementById('btn-like').onclick = async () => {
-        const name = document.getElementById('detail-title').innerText;
-        if (bridge) {
-            const success = await bridge.AddLike(name);
-            if (success) {
-                alert('点赞成功！');
+    const btnLike = document.getElementById('btn-like');
+    if (btnLike) {
+        btnLike.onclick = async () => {
+            const nameElem = document.getElementById('detail-title');
+            if (bridge && nameElem) {
+                const success = await bridge.AddLike(nameElem.innerText);
+                if (success) alert('点赞成功！');
             }
-        } else {
-            alert('模拟环境无法点赞');
-        }
-    };
+        };
+    }
 
-    // Comment Button
-    document.getElementById('btn-comment').onclick = async () => {
-        const name = document.getElementById('detail-title').innerText;
-        const input = document.getElementById('input-comment');
-        const text = input.value.trim();
-        if (!text) return;
-
-        if (bridge) {
-            const success = await bridge.AddComment(name, text);
-            if (success) {
-                input.value = '';
-                loadComments(name);
+    const btnComment = document.getElementById('btn-comment');
+    if (btnComment) {
+        btnComment.onclick = async () => {
+            const nameElem = document.getElementById('detail-title');
+            const input = document.getElementById('input-comment');
+            if (bridge && nameElem && input) {
+                const text = input.value.trim();
+                if (text && await bridge.AddComment(nameElem.innerText, text)) {
+                    input.value = '';
+                    loadComments(nameElem.innerText);
+                }
             }
-        }
-    };
+        };
+    }
 }
 
 async function loadFallbackData() {
@@ -556,4 +618,19 @@ async function loadFallbackData() {
     } catch (e) {
         console.error("Failed to load fallback data", e);
     }
+}
+
+// 事件监听中心：只注册一次
+function initMapEvents() {
+    if (!chart) return;
+
+    chart.on('click', (params) => {
+        if (params.componentType === 'series' && params.seriesType === 'scatter') {
+            // 点击散点：显示详情
+            showDetail(params.name, params.value[2], params.value[3]);
+        } else if (params.componentType === 'geo' || (params.componentType === 'series' && params.seriesType === 'map')) {
+            // 点击地图区域：显示该市卡片
+            showCityCards(params.name);
+        }
+    });
 }

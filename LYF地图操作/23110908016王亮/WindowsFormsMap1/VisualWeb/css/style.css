@@ -313,12 +313,19 @@ header .version {
     bottom: 30px;
     right: 30px;
     z-index: 10;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    /* 已改为右对齐，消除T型排版 */
+    gap: 12px;
 }
 
 .map-controls {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 8px;
+    /* 稍微收紧间距 */
+    align-items: flex-end;
 }
 
 .map-btn {
@@ -546,4 +553,45 @@ header .version {
 
 ::-webkit-scrollbar-thumb:hover {
     background: rgba(255, 255, 255, 0.3);
+}
+
+/* Analysis Mode Switcher */
+.analysis-controls {
+    display: flex;
+    background: rgba(255, 255, 255, 0.05);
+    /* 改用浅色背景以符合整体风格 */
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-radius: 12px;
+    padding: 6px;
+    margin-top: 0;
+    /* 间距由父容器 gap 控制 */
+    border: 1px solid var(--glass-border);
+    gap: 5px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.analysis-btn {
+    width: 40px;
+    height: 40px;
+    background: transparent;
+    border: none;
+    border-radius: 8px;
+    color: white;
+    font-size: 18px;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.analysis-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    transform: translateY(-2px);
+}
+
+.analysis-btn.active {
+    background: var(--accent-gradient);
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.5);
 }

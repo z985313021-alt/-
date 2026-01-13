@@ -69,11 +69,7 @@ namespace WindowsFormsMap1
         {
             try
             {
-                MessageBox.Show("Form Load started...", "Debug");
-
                 await webView.EnsureCoreWebView2Async(null);
-
-                MessageBox.Show("WebView2 initialized. Registering bridge...", "Debug");
 
                 // [Agent] Register the bridge for SQL interaction
                 // JS can access via: window.chrome.webview.hostObjects.bridge
@@ -82,12 +78,9 @@ namespace WindowsFormsMap1
                 // [Agent] Navigate AFTER bridge is registered to avoid race conditions
                 string htmlPath = FindHtmlAsset("index.html");
 
-                MessageBox.Show($"Looking for HTML at: {htmlPath}", "Debug");
-
                 if (File.Exists(htmlPath))
                 {
                     webView.Source = new Uri(htmlPath);
-                    MessageBox.Show("Source set successfully!", "Debug");
                 }
                 else
                 {
