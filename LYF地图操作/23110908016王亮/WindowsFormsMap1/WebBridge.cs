@@ -36,7 +36,7 @@ namespace WindowsFormsMap1
 
                 // 获取点位数据 (限制 1000 条以免前端卡顿)
                 var points = new List<ProjectPoint>();
-                DataTable dtPoints = DBHelper.ExecuteQuery("SELECT TOP 1000 Name, Category, City, Latitude, Longitude FROM ICH_Items");
+                DataTable dtPoints = DBHelper.ExecuteQuery("SELECT TOP 1000 Name, Category, City, Latitude, Longitude, Batch FROM ICH_Items");
                 foreach (DataRow dr in dtPoints.Rows)
                 {
                     points.Add(new ProjectPoint
@@ -45,7 +45,8 @@ namespace WindowsFormsMap1
                         category = dr["Category"].ToString(),
                         city = dr["City"].ToString(),
                         y = Convert.ToDouble(dr["Latitude"]),
-                        x = Convert.ToDouble(dr["Longitude"])
+                        x = Convert.ToDouble(dr["Longitude"]),
+                        batch = dr["Batch"] != DBNull.Value ? Convert.ToInt32(dr["Batch"]) : 0
                     });
                 }
 
@@ -148,6 +149,44 @@ namespace WindowsFormsMap1
             {
                 return "[]";
             }
+        }
+
+        // --- 数据模型类 ---
+        public class ProjectPoint
+        {
+            public string name { get; set; }
+            public string category { get; set; }
+            public string city { get; set; }
+            public double x { get; set; } // Longitude
+            public double y { get; set; } // Latitude
+            public int batch { get; set; } // 公布批次 (1-5)
+        }
+
+        public class CityStat
+        {
+            public string name { get; set; }
+            public int value { get; set; }
+        }
+
+        public class CategoryStat
+        {
+            public string name { get; set; }
+            public int count { get; set; }
+        }
+
+        public class WebData
+        {
+            public ProjectInfo projectInfo { get; set; } = new ProjectInfo();
+            public List<CityStat> statsByCity { get; set; }
+            public List<CategoryStat> categories { get; set; }
+            public List<ProjectPoint> points { get; set; }
+        }
+
+        public class ProjectInfo
+        {
+            public string title { get; set; } = "山东省非物质文化遗产大数据概览";
+            public int totalItems { get; set; }
+            public string lastUpdated { get; set; }
         }
     }
 }
