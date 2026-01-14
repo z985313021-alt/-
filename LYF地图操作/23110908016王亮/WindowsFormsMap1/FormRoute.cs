@@ -7,10 +7,14 @@ using ESRI.ArcGIS.Display;
 
 namespace WindowsFormsMap1
 {
+    /// <summary>
+    /// 【路径规划交互窗体】：支持多点途经点设置、路网拓扑重建以及路径最优解展示
+    /// 集成了路网缓存检测、空间投影纠偏以及高亮闪烁等交互特性
+    /// </summary>
     public partial class FormRoute : Form
     {
         private Form1 _mainForm;
-        private List<IPoint> _routePoints;
+        private List<IPoint> _routePoints; // 存储用户在地图上点击拾取的途经点集合
         private AnalysisHelper _analyzer;
 
         public FormRoute(Form1 mainForm, AnalysisHelper analyzer)
@@ -35,15 +39,16 @@ namespace WindowsFormsMap1
             btnBuildNetwork.ContextMenuStrip = buildMenu;
         }
 
+        // 【新增途经点】：将地图坐标同步到列表，并生成实时点标记
         public void AddPoint(IPoint pt)
         {
             if (pt == null) return;
             _routePoints.Add(pt);
 
-            // 简单显示坐标
-            lstPoints.Items.Add($"点 {_routePoints.Count}: ({pt.X:F3}, {pt.Y:F3})");
+            // 列表回显：展示地理坐标 (格式化为 3 位精度)
+            lstPoints.Items.Add($"途经点 {_routePoints.Count}: ({pt.X:F3}, {pt.Y:F3})");
 
-            // 在地图上绘制临时的标记
+            // 在地图主容器绘制临时标记 (带序列号)
             _mainForm.DrawTempPoint(pt, _routePoints.Count);
         }
 
@@ -82,66 +87,64 @@ namespace WindowsFormsMap1
             lblInfo.Text = "尝试加载路网缓存...";
         }
 
+        /// <summary>
+        /// 【执行路径求解】：驱动 Dijkstra 算法计算多点间的最优连通路径
+        /// 包含：单位纠偏逻辑 (地理 vs 投影)、结果高亮及业务状态回显
+        /// </summary>
         private void btnSolve_Click(object sender, EventArgs e)
         {
             if (_routePoints.Count < 2)
             {
-                MessageBox.Show("至少需要 2 个点才能规划路径！");
+                MessageBox.Show("规划失败：至少需要标注“起点”与“终点”两个有效位置！");
                 return;
             }
 
             try
             {
                 this.Cursor = Cursors.WaitCursor;
-                lblInfo.Text = "正在计算...";
+                lblInfo.Text = "算法计算中，请稍候...";
 
+                // 调用分析引擎执行多点路径搜索
                 IPolyline result = _analyzer.FindShortestPath(_routePoints);
 
                 this.Cursor = Cursors.Default;
 
                 if (result != null && !result.IsEmpty)
                 {
-                    // [Agent Fix] 单位换算逻辑
                     double lenKm = 0;
 
-                    // 1. 尝试投影到地图坐标系 (通常是投影坐标系/米)
+                    // 【空间校准】：确保计算结果与当前地图投影系统一致
                     ISpatialReference mapSR = _mainForm.MapSpatialReference;
                     if (mapSR != null && result.SpatialReference != null)
                     {
-                        // 如果当前路网是地理坐标系(Results in Degrees) 而地图是投影坐标系(Meters) -> 需要投影
+                        // 逻辑：如果结果仍为地理坐标 (度)，则强转为地图目前的投影坐标 (米) 以获得准确物理长度
                         if (mapSR is IProjectedCoordinateSystem && !(result.SpatialReference is IProjectedCoordinateSystem))
                         {
                             try { result.Project(mapSR); } catch { }
                         }
                     }
 
-                    // 2. 计算长度 (假设投影后单位为米)
-                    // 如果地图本身就是地理坐标系，那没办法，只能显示度，或者强行用 GeodeticLength
-                    // 但根据截图坐标(362890...)，地图肯定是投影坐标系(米)
+                    // 物理长度换算 (MapUnits 默认为 Meters)
                     double lenMeters = result.Length;
-
-                    // 3. 换算为公里
                     lenKm = lenMeters / 1000.0;
 
-                    // 绘制结果 (加粗红线)
+                    // 结果呈现：绘制醒目的红色高亮路径
                     _mainForm.DrawGeometry(result, new RgbColorClass { Red = 255 });
 
-                    string info = $"规划成功！总长度: {lenKm:F2} km";
+                    string info = $"规划成功！总长度估计: {lenKm:F2} km";
                     lblInfo.Text = info;
-                    MessageBox.Show($"{info}\n已在地图显示红色路径。\n若看不见，请检查图层是否开启。\n代码位于: AnalysisHelper.cs", "结果");
+                    MessageBox.Show($"{info}\n\n已完成路径同步绘制，请查看地图红色线段。", "解算成功");
                 }
                 else
                 {
-                    lblInfo.Text = "路径规划失败。";
-                    string tip = "未能找到路径。请检查：\n1. 是否点击了【构建路网】菜单？\n2. 选中的道路图层是否有内容？\n\n核心逻辑文件：AnalysisHelper.cs";
-                    MessageBox.Show(tip, "提示");
+                    lblInfo.Text = "路径不可达。";
+                    MessageBox.Show("计算无解：可能是途经点不在路网连通域内，或路网未成功加载。", "提示");
                 }
             }
             catch (Exception ex)
             {
                 this.Cursor = Cursors.Default;
-                lblInfo.Text = "运行错: " + ex.Message;
-                MessageBox.Show("计算出错，请重试或重构路网。\n错误详情: " + ex.Message);
+                MessageBox.Show("求解过程崩溃：" + ex.Message);
             }
         }
 

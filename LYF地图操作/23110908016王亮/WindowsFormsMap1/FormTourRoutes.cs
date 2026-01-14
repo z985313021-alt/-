@@ -8,10 +8,14 @@ using ESRI.ArcGIS.Geodatabase;
 
 namespace WindowsFormsMap1
 {
+    /// <summary>
+    /// 【游览路线定制窗体】：提供基于地市选择的自动路线规划与方案管理
+    /// 支持多策略路网图层筛选、城市序列解析以及规划方案的持久化展示
+    /// </summary>
     public partial class FormTourRoutes : Form
     {
         private Form1 _mainForm;
-        private List<AnalysisHelper.TourRoute> _routes;
+        private List<AnalysisHelper.TourRoute> _routes; // 存储当前生成的多个路线方案
         private IFeatureLayer _cityLayer;
         private IFeatureLayer _ichLayer;
         private List<IFeatureLayer> _lineLayers;
@@ -29,6 +33,7 @@ namespace WindowsFormsMap1
             InitCityList();
         }
 
+        // 【图层语义识别】：自动在所有图层中寻找最具“路网”特征的线图层
         private void InitLayers()
         {
             cmbRoadLayers.Items.Clear();
@@ -38,10 +43,10 @@ namespace WindowsFormsMap1
                 {
                     cmbRoadLayers.Items.Add(new LayerItem(l));
                 }
-
+ 
                 if (cmbRoadLayers.Items.Count > 0)
                 {
-                    // Smart default selection
+                    // 智能推荐逻辑：优先选择名称中包含“融合”、“路”、“高速”等关键字的图层
                     bool found = false;
                     for(int i=0; i<cmbRoadLayers.Items.Count; i++)
                     {
@@ -114,40 +119,43 @@ namespace WindowsFormsMap1
             }
         }
 
+        // 【核心规划引擎】：调用后台算法进行跨地市路径规划
         private void btnGenerate_Click(object sender, EventArgs e)
         {
-            // 1. Get Road Layer
+            // 1. 获取选中的路网数据源
             IFeatureLayer selectedRoadLayer = null;
             if (cmbRoadLayers.SelectedItem is LayerItem item)
             {
                 selectedRoadLayer = item.Layer;
             }
-
+ 
             if (selectedRoadLayer == null)
             {
                 MessageBox.Show("请先选择一个路网图层（线图层）。");
                 return;
             }
-
-            // 2. Get Cities
+ 
+            // 2. 获取目标城市序列
             List<string> selectedCities = new List<string>();
             foreach (var c in checkedListBoxCities.CheckedItems)
             {
                 selectedCities.Add(c.ToString());
             }
-
+ 
             if (selectedCities.Count < 2)
             {
                 MessageBox.Show("请至少选择两个城市以规划路线。");
                 return;
             }
-
+ 
+            // 3. 执行异步规划 (防止界面卡死)
             this.Cursor = Cursors.WaitCursor;
             lblStatus.Text = "正在解析路网并规划...";
-            Application.DoEvents();
-
+            Application.DoEvents(); // 强制刷新 UI 渲染
+ 
             try
             {
+                // 调用 AnalysisHelper 的复杂算法：涉及拓扑重建、Dijkstra 求解及非遗点位抽稀
                 var route = _mainForm._analysisHelper.GenerateRouteByCities(selectedCities, _cityLayer, selectedRoadLayer, _ichLayer);
                 if (route != null)
                 {
@@ -159,16 +167,16 @@ namespace WindowsFormsMap1
                 else
                 {
                     lblStatus.Text = "规划失败";
-                    // 获取详细日志
+                    // 提取算法内部日志进行故障诊断
                     string log = _mainForm._analysisHelper.LastLog;
-                    if (log.Length > 500) log = log.Substring(log.Length - 500) + "..."; // Avoid too long message
-
-                    MessageBox.Show("规划失败。调试信息如下：\n" + log, "诊断报告");
+                    if (log.Length > 500) log = log.Substring(log.Length - 500) + "..."; 
+ 
+                    MessageBox.Show("规划失败。原因可能是：路网不连通、坐标系不一致或内存溢出。\n调试诊断结果：\n" + log, "诊断报告");
                 }
             }
             catch (Exception ex)
             {
-                lblStatus.Text = "错误: " + ex.Message;
+                lblStatus.Text = "逻辑错误: " + ex.Message;
                 MessageBox.Show("执行出错: " + ex.Message);
             }
             finally

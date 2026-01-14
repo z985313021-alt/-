@@ -35,7 +35,7 @@ namespace WindowsFormsMap1
             axMapControl2.Extent = axMapControl2.FullExtent;
         }
 
-        // 鼠标按下路由
+        // 【鼠标点击分发器】：判断当前工具模式（漫游、编辑、量测、查询等），并将点击事件路由到具体逻辑
         private void axMapControl2_OnMouseDown(object sender, IMapControlEvents2_OnMouseDownEvent e)
         {
             if (e.button != 1) return; // 只处理左键
@@ -91,7 +91,7 @@ namespace WindowsFormsMap1
             }
         }
 
-        // [Member B] 要素识别 (Identify) 共享逻辑
+        // 【要素识别核心逻辑】：在地图点击位置寻找非遗要素，并弹出详细信息卡片
         private void DoIdentify(int x, int y, ESRI.ArcGIS.Controls.AxMapControl targetMapControl = null)
         {
             try
@@ -264,6 +264,7 @@ namespace WindowsFormsMap1
 
         // ================= TOC 交互逻辑 =================
 
+        // 【图层控制台交互】：处理图层树的右键菜单（符号化、移除图层、缩放至图层）
         private void AxTOCControl2_OnMouseDown(object sender, ITOCControlEvents_OnMouseDownEvent e)
         {
             if (e.button != 2) return; // 右键点击

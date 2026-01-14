@@ -13,11 +13,11 @@ namespace WindowsFormsMap1
     /// </summary>
     public static class DBHelper
     {
-        // 连接字符串：连接本地默认 SQL Server 实例，使用 Windows 身份验证
-        // [用户指定] 实例名: .\SQLEXPRESS
+        // 【连接字符串】：定义指向本地 SQL Server Express 实例的路径，默认使用 Windows 集成身份验证
+        // 注意：Initial Catalog 指定了系统对应的演示数据库名称
         private static readonly string ConnectionString = @"Data Source=.\SQLEXPRESS;Initial Catalog=ICH_VisualDB;Integrated Security=True";
 
-        // 测试连接
+        // 【连接测试】：验证本地数据库服务是否已启动且库文件已正确挂载
         public static bool TestConnection()
         {
             try
@@ -30,12 +30,12 @@ namespace WindowsFormsMap1
             }
             catch (Exception ex)
             {
-                MessageBox.Show("数据库连接失败: " + ex.Message + "\n请确认已执行 init_db.sql 并且服务已启动。", "DB Error");
+                MessageBox.Show("数据库连接失败：\n" + ex.Message + "\n请确认已安装 SQL Server 并执行了 init_db.sql 脚本。", "数据库错误");
                 return false;
             }
         }
 
-        // 执行增删改 (Insert/Update/Delete)
+        // 【非查询操作】：执行增、删、改（Insert/Update/Delete）SQL 指令
         public static int ExecuteNonQuery(string sql, params SqlParameter[] parameters)
         {
             try
@@ -52,12 +52,12 @@ namespace WindowsFormsMap1
             }
             catch (Exception ex)
             {
-                Console.WriteLine("SQL Error: " + ex.Message);
+                Console.WriteLine("SQL 执行错误：" + ex.Message);
                 return -1;
             }
         }
 
-        // 执行查询返回 DataTable
+        // 【数据集查询】：执行查询并返回 DataTable 格式的结果集，常用于 DataGridView 绑定
         public static DataTable ExecuteQuery(string sql, params SqlParameter[] parameters)
         {
             DataTable dt = new DataTable();
@@ -78,12 +78,12 @@ namespace WindowsFormsMap1
             }
             catch (Exception ex)
             {
-                Console.WriteLine("Query Error: " + ex.Message);
+                Console.WriteLine("查询执行错误：" + ex.Message);
             }
             return dt;
         }
 
-        // 查询单个值 (例如 Count)
+        // 【标量查询】：查询并返回单个结果值（如 COUNT(*), SUM(Total) 等）
         public static object ExecuteScalar(string sql, params SqlParameter[] parameters)
         {
             try
@@ -104,7 +104,8 @@ namespace WindowsFormsMap1
             }
         }
 
-        // [Member E] Added: 执行查询并返回JSON字符串（手动序列化，不依赖Newtonsoft）
+        // 【JSON 数据桥接】：将 SQL 查询结果直接转换为标准 JSON 字符串
+        // 此逻辑专门为 Web 端交互设计，实现了轻量级的手动序列化以减小库依赖
         public static string ExecuteJsonQuery(string sql, params SqlParameter[] parameters)
         {
             try
@@ -130,6 +131,7 @@ namespace WindowsFormsMap1
                         }
                         else if (value is string || value is DateTime)
                         {
+                            // 处理特殊转义字符，保证 Web 端解析不出错
                             json.Append("\"").Append(value.ToString().Replace("\"", "\\\"")).Append("\"");
                         }
                         else
@@ -150,7 +152,7 @@ namespace WindowsFormsMap1
             }
             catch (Exception ex)
             {
-                Console.WriteLine("ExecuteJsonQuery Error: " + ex.Message);
+                Console.WriteLine("JSON 转换错误：" + ex.Message);
                 return "[]";
             }
         }

@@ -17,22 +17,22 @@ namespace WindowsFormsMap1
     /// </summary>
     public partial class Form1
     {
-        // ================= 智能工具箱变量 =================
-        private IPoint _routeStart;
-        private IPoint _routeEnd;
-        private IEnvelope _queryEnv;
-        private IPolygon _queryPoly;
+        // ================= 智能工具箱内部变量 =================
+        private IPoint _routeStart;     // 路径规划起点
+        private IPoint _routeEnd;       // 路径规划终点
+        private IEnvelope _queryEnv;    // 拉框查询范围
+        private IPolygon _queryPoly;    // 多边形查询区域
 
         // ================= 初始化 =================
+        // 【智能工具箱初始化】：动态构建主界面顶部的 Ribbon 菜单，注入路径规划、空间分析及数据清理功能
         public void InitSmartTools()
         {
-            // [Modified] 用户要求显示为 "智能工具箱" 且放在显著位置
+            // 模式要求：创建一个名为“智能工具箱”的项目级顶层菜单
             ToolStripMenuItem smartMenu = new ToolStripMenuItem("智能工具箱");
             smartMenu.Image = ThemeEngine.GetIcon("Toolbox", Color.Black);
             smartMenu.TextImageRelation = TextImageRelation.ImageAboveText;
 
-            // 1. 路径规划 (合并入口)
-            // 用户要求：点击“路径规划”后，弹出一个弹窗来，在里面进行构建路网和规划面板
+            // 1. 路径规划子项：呼出路径搜索面板，支持路网构建、点对点最短路径计算
             ToolStripMenuItem routeItem = new ToolStripMenuItem("路径规划");
             routeItem.Click += (s, e) =>
             {
@@ -45,8 +45,7 @@ namespace WindowsFormsMap1
             };
             smartMenu.DropDownItems.Add(routeItem);
 
-            // 2. 缓冲区
-            // 2. 缓冲区 (统一入口)
+            // 2. 空间缓冲区：弹出交互式缓冲区参数设置窗口（KM 与地图单位自动转换）
             smartMenu.DropDownItems.Add("交互式缓冲区工具箱", null, (s, e) =>
             {
                 if (SmartBufferForm == null || SmartBufferForm.IsDisposed)
@@ -57,26 +56,26 @@ namespace WindowsFormsMap1
                 SmartBufferForm.Activate();
             });
 
-            // 3. 辅助功能
+            // 3. 画布清理：一键移除地图上的所有临时几何图形（Buffer 圆、规划线路等）
             smartMenu.DropDownItems.Add("清除所有绘图", null, (s, e) =>
             {
                 axMapControl2.ActiveView.GraphicsContainer.DeleteAllElements();
                 axMapControl2.ActiveView.Refresh();
             });
 
-            // 4. 几何查询
+            // 4. 高级几何查询：支持拉框查询与多边形拓扑包含查询
             ToolStripMenuItem queryItem = new ToolStripMenuItem("几何查询");
             queryItem.DropDownItems.Add("拉框查询", null, (s, e) => { SwitchTool(MapToolMode.QueryBox); });
             queryItem.DropDownItems.Add("多边形查询", null, (s, e) => { SwitchTool(MapToolMode.QueryPolygon); });
             smartMenu.DropDownItems.Add(queryItem);
 
-            // 插入到第二个位置 (索引1)，仅次于“数据加载”
+            // 优先级注入：将该工具箱插入到菜单栏的显著位置（紧随数据加载之后）
             this.menuStrip1.Items.Insert(1, smartMenu);
         }
 
         // ================= 业务逻辑实现 =================
 
-        // [Agent (通用辅助)] Modified: 支持路网缓存加载
+        // 【构建路网核心逻辑】：支持缓存加速
         public void BuildRoadNetwork()
         {
             ILayer layer = GetSelectedLayer();
@@ -84,7 +83,7 @@ namespace WindowsFormsMap1
             {
                 this.Cursor = Cursors.WaitCursor;
 
-                // 先尝试加载缓存
+                // 1. 尝试从二进制缓存文件读取路网结构（加速加载）
                 if (_analysisHelper.TryLoadNetworkCache(fl))
                 {
                     this.Cursor = Cursors.Default;
@@ -93,7 +92,7 @@ namespace WindowsFormsMap1
                 }
                 else
                 {
-                    // 缓存不存在或加载失败,执行完整构建
+                    // 2. 若无缓存，则遍历所有线要素进行拓扑构建（较为耗时）
                     string msg = _analysisHelper.BuildNetwork(fl);
                     this.Cursor = Cursors.Default;
                     MessageBox.Show(msg);
@@ -122,30 +121,33 @@ namespace WindowsFormsMap1
             }
         }
 
+        // 【路径求解】：基于 Dijkstra 算法计算最短路径
+        // 【路径规划执行】：调用后台分析模块执行最短路径计算
         private void SolvePath()
         {
             if (_routeStart == null || _routeEnd == null)
             {
-                MessageBox.Show("请先设置起点和终点！");
+                MessageBox.Show("导航失败：请先在地图上确定起点与终点！");
                 return;
             }
             try
             {
+                // 指令分发：调用 Dijkstra 核心算法进行路径追踪
                 IPolyline result = _analysisHelper.FindShortestPath(_routeStart, _routeEnd);
                 if (result != null)
                 {
-                    // 绘制结果 (红色粗线)
+                    // 结果落画：将生成的几何路径以红色高亮的形式绘制在地图 Graphics 层
                     DrawGeometry(result, new RgbColorClass { Red = 255 });
-                    MessageBox.Show($"规划成功！总长度: {result.Length:F2}");
+                    MessageBox.Show($"规划路径已生成！预计长度: {result.Length:F2} 单位");
                 }
                 else
                 {
-                    MessageBox.Show("未找到路径，请确保起点终点在路网附近，且路网连通。");
+                    MessageBox.Show("计算无结果：请检查两点间是否具备连通的道路网路。");
                 }
             }
             catch (Exception ex)
             {
-                MessageBox.Show("计算失败: " + ex.Message);
+                MessageBox.Show("分析过程发生系统异常: " + ex.Message);
             }
         }
 
@@ -206,29 +208,33 @@ namespace WindowsFormsMap1
             }
         }
 
+        // 【空间关联查询】：基于多边形（如缓冲区）对指定图层进行拓扑交集查询，并弹出统计报告
         private void PerformSpatialQuery(IGeometry filterGeo)
         {
             ILayer layer = GetSelectedLayer();
             if (layer is IFeatureLayer fl)
             {
+                // 执行空间选择集过滤，返回被覆盖的要素总数
                 int count = AnalysisHelper.SelectFeatures(fl, filterGeo);
+                // 仅刷新选择集绘制阶段，提升交互流畅度
                 axMapControl2.ActiveView.PartialRefresh(esriViewDrawPhase.esriViewGeoSelection, null, null);
 
-                // [Modified] Use new Query Result Form
+                // 呼出专业查询结果窗口，展示匹配要素的属性详情
                 FormQueryResult resForm = new FormQueryResult(fl, count);
                 resForm.ShowDialog();
             }
             else
             {
-                MessageBox.Show("请先选中目标图层！");
+                MessageBox.Show("查询模式错误：请先在左侧图层树 (TOC) 中选中一个目标要素图层！");
             }
         }
 
+        // 【临时图形绘制】：在地图的图形容器中快速绘制圆、线、多边形等示意几何体，支持多坐标系自动转换
         public void DrawGeometry(IGeometry geo, IColor color)
         {
             if (geo == null || geo.IsEmpty) return;
 
-            // [Refinement] 确保绘制的几何体与地图坐标系一致
+            // 空间一致性检查：确保传入的分析结果几何体与当前地图的投影坐标系对齐
             IGeometry drawGeo = geo;
             ISpatialReference mapSR = axMapControl2.SpatialReference;
             if (geo.SpatialReference != null && mapSR != null && geo.SpatialReference.FactoryCode != mapSR.FactoryCode)
@@ -237,12 +243,11 @@ namespace WindowsFormsMap1
                 try { drawGeo.Project(mapSR); } catch { }
             }
 
-            // 简单绘制临时元素 (Element)
+            // 构造对应的 Element 对象，将其注入到 GraphicsContainer 中
             IElement ele = null;
             if (drawGeo.GeometryType == esriGeometryType.esriGeometryPolyline)
             {
                 LineElementClass lineEle = new LineElementClass { Geometry = drawGeo };
-                // 增加线宽到 4，确保清晰可见
                 lineEle.Symbol = new SimpleLineSymbolClass { Color = color, Width = 4 };
                 ele = lineEle;
             }
@@ -263,7 +268,7 @@ namespace WindowsFormsMap1
             if (ele != null)
             {
                 axMapControl2.ActiveView.GraphicsContainer.AddElement(ele, 0);
-                // 强制刷新地理背景和图形层
+                // 触发刷新：同步更新地理要素背景与上层的动态标注图形
                 axMapControl2.ActiveView.PartialRefresh(esriViewDrawPhase.esriViewGeography, null, null);
                 axMapControl2.ActiveView.PartialRefresh(esriViewDrawPhase.esriViewGraphics, null, null);
             }

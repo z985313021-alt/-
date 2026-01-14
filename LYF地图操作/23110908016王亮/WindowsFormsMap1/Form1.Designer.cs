@@ -712,79 +712,94 @@ namespace WindowsFormsMap1
 
         #endregion
 
-        private System.Windows.Forms.MenuStrip menuStrip1;
-        private System.Windows.Forms.ToolStripMenuItem 数据加载ToolStripMenuItem;
-        private System.Windows.Forms.ToolStripMenuItem 加载地图文档ToolStripMenuItem;
-        private System.Windows.Forms.ToolStripMenuItem 加载sho数据ToolStripMenuItem;
-        private System.Windows.Forms.ToolStripMenuItem itemAddXYData;
-        private System.Windows.Forms.StatusStrip statusStrip1;
-        private System.Windows.Forms.ToolStripStatusLabel toolStripStatusLabel1;
-        private System.Windows.Forms.ToolStripMenuItem 地图量测ToolStripMenuItem;
-        private System.Windows.Forms.ToolStripMenuItem tsmiAreaMeasure;
-        private System.Windows.Forms.ToolStripMenuItem 面积量测ToolStripMenuItem;
-        private System.Windows.Forms.ToolStripMenuItem 查询ToolStripMenuItem;
-        private System.Windows.Forms.ToolStripMenuItem 另存为ToolStripMenuItem;
-        private System.Windows.Forms.ToolStripSeparator toolStripSeparatorEdit;
-        private System.Windows.Forms.ToolStripMenuItem itemCreateFeature;
-        private System.Windows.Forms.ToolStripMenuItem itemUndo;
+        // ==================== 菜单栏与状态栏 ====================
+        private System.Windows.Forms.MenuStrip menuStrip1;  // 顶部主菜单栏
+        private System.Windows.Forms.StatusStrip statusStrip1;  // 底部状态栏
+        private System.Windows.Forms.ToolStripStatusLabel toolStripStatusLabel1;  // 状态栏-坐标显示标签
 
-        // [新增] 布局视图相关控件
-        private System.Windows.Forms.TabControl tabControl1;
-        private System.Windows.Forms.TabPage tabPage1;
-        private System.Windows.Forms.TabPage tabPage2;
-        private System.Windows.Forms.TabPage tabPageVisual;
-        private System.Windows.Forms.Panel panelVisualHeader;
-        private System.Windows.Forms.TextBox txtVisualSearch;
-        private System.Windows.Forms.Button btnVisualSearch;
-        private System.Windows.Forms.Button btnBackToPro;
-        private System.Windows.Forms.Button btnVisualPan;
-        private System.Windows.Forms.Button btnVisualZoomIn;
-        private System.Windows.Forms.Button btnVisualZoomOut;
-        private System.Windows.Forms.Button btnVisualFull;
+        // ==================== 数据加载菜单 ====================
+        private System.Windows.Forms.ToolStripMenuItem 数据加载ToolStripMenuItem;  // 菜单-数据加载
+        private System.Windows.Forms.ToolStripMenuItem 加载地图文档ToolStripMenuItem;  // 菜单项-加载MXD
+        private System.Windows.Forms.ToolStripMenuItem 加载sho数据ToolStripMenuItem;  // 菜单项-加载SHP
+        private System.Windows.Forms.ToolStripMenuItem itemAddXYData;  // 菜单项-添加XY坐标数据
+        private System.Windows.Forms.ToolStripMenuItem itemInitData;  // 菜单项-一键初始化非遗数据
+        private System.Windows.Forms.ToolStripMenuItem itemCheckDataQuality;  // 菜单项-检查数据质量
+        private System.Windows.Forms.ToolStripMenuItem itemDisplaceCoordinates;  // 菜单项-离散化重叠点位
+        private System.Windows.Forms.ToolStripMenuItem 查询ToolStripMenuItem;  // 菜单项-查询（旧）
+        private System.Windows.Forms.ToolStripMenuItem 另存为ToolStripMenuItem;  // 菜单项-另存为MXD文档
 
-        private System.Windows.Forms.Button btnVisualSync;
-        private System.Windows.Forms.Button btnVisualArrow; // [New]
-        private ESRI.ArcGIS.Controls.AxMapControl axMapControlVisual;
-        private ESRI.ArcGIS.Controls.AxPageLayoutControl axPageLayoutControl1;
-        private System.Windows.Forms.ToolStripMenuItem 清除选择集ToolStripMenuItem;
-        private System.Windows.Forms.Splitter splitter1;
-        private System.Windows.Forms.Splitter splitter2;
-        private ESRI.ArcGIS.Controls.AxTOCControl axTOCControl2;
-        private ESRI.ArcGIS.Controls.AxMapControl axMapControl2;
-        private ESRI.ArcGIS.Controls.AxLicenseControl axLicenseControl3;
-        private System.Windows.Forms.ToolStripMenuItem 刷新至初始视图ToolStripMenuItem;
-        private System.Windows.Forms.ToolStripMenuItem 刷新ToolStripMenuItem;
-        private System.Windows.Forms.ToolStripMenuItem 漫游ToolStripMenuItem;
+        // ==================== 地图量测菜单 ====================
+        private System.Windows.Forms.ToolStripMenuItem 地图量测ToolStripMenuItem;  // 菜单-地图量测
+        private System.Windows.Forms.ToolStripMenuItem tsmiAreaMeasure;  // 菜单项-距离测量
+        private System.Windows.Forms.ToolStripMenuItem 面积量测ToolStripMenuItem;  // 菜单项-面积测量
 
-        // [迁移] UIHelper 菜单项
-        private System.Windows.Forms.ToolStripMenuItem menuMapping;
-        private System.Windows.Forms.ToolStripMenuItem itemSymbolize;
-        private System.Windows.Forms.ToolStripMenuItem itemExport;
-        private System.Windows.Forms.ToolStripMenuItem itemLabel;
+        // ==================== 导航与刷新菜单 ====================
+        private System.Windows.Forms.ToolStripMenuItem 刷新ToolStripMenuItem;  // 菜单-刷新地图
+        private System.Windows.Forms.ToolStripMenuItem 清除选择集ToolStripMenuItem;  // 菜单-清除选择集
+        private System.Windows.Forms.ToolStripMenuItem 刷新至初始视图ToolStripMenuItem;  // 菜单项-全图显示
+        private System.Windows.Forms.ToolStripMenuItem 漫游ToolStripMenuItem;  // 菜单-漫游工具
 
-        private System.Windows.Forms.ToolStripMenuItem menuQuery;
-        private System.Windows.Forms.ToolStripMenuItem itemDataQuery;
-        private System.Windows.Forms.ToolStripMenuItem itemSpatialQuery;
+        // ==================== 地图制图菜单 ====================
+        private System.Windows.Forms.ToolStripMenuItem menuMapping;  // 菜单-地图制图
+        private System.Windows.Forms.ToolStripMenuItem itemSymbolize;  // 菜单项-符号化
+        private System.Windows.Forms.ToolStripMenuItem itemExport;  // 菜单项-导出地图
+        private System.Windows.Forms.ToolStripMenuItem itemLabel;  // 菜单项-动态标注
 
-        private System.Windows.Forms.ToolStripMenuItem menuAnalysis;
-        private System.Windows.Forms.ToolStripMenuItem itemBuffer;
-        private System.Windows.Forms.ToolStripMenuItem itemOverlay;
+        // ==================== 查询统计菜单 ====================
+        private System.Windows.Forms.ToolStripMenuItem menuQuery;  // 菜单-查询统计
+        private System.Windows.Forms.ToolStripMenuItem itemDataQuery;  // 菜单项-属性查询
+        private System.Windows.Forms.ToolStripMenuItem itemSpatialQuery;  // 菜单项-空间查询
 
-        private System.Windows.Forms.ToolStripMenuItem menuLayout;
-        private System.Windows.Forms.ToolStripMenuItem itemNorthArrow;
-        private System.Windows.Forms.ToolStripMenuItem itemScaleBar;
-        private System.Windows.Forms.ToolStripMenuItem itemLegend;
+        // ==================== 空间分析菜单 ====================
+        private System.Windows.Forms.ToolStripMenuItem menuAnalysis;  // 菜单-空间分析
+        private System.Windows.Forms.ToolStripMenuItem itemBuffer;  // 菜单项-缓冲区分析
+        private System.Windows.Forms.ToolStripMenuItem itemOverlay;  // 菜单项-叠置分析
 
-        private System.Windows.Forms.ToolStripMenuItem menuEditing;
-        private System.Windows.Forms.ToolStripMenuItem itemStartEdit;
-        private System.Windows.Forms.ToolStripMenuItem itemSaveEdit;
-        private System.Windows.Forms.ToolStripMenuItem itemStopEdit;
+        // ==================== 版面设计菜单 ====================
+        private System.Windows.Forms.ToolStripMenuItem menuLayout;  // 菜单-版面设计
+        private System.Windows.Forms.ToolStripMenuItem itemNorthArrow;  // 菜单项-添加指北针
+        private System.Windows.Forms.ToolStripMenuItem itemScaleBar;  // 菜单项-添加比例尺
+        private System.Windows.Forms.ToolStripMenuItem itemLegend;  // 菜单项-添加图例
 
+        // ==================== 编辑功能菜单 ====================
+        private System.Windows.Forms.ToolStripMenuItem menuEditing;  // 菜单-空间数据编辑
+        private System.Windows.Forms.ToolStripMenuItem itemStartEdit;  // 菜单项-开始编辑
+        private System.Windows.Forms.ToolStripMenuItem itemSaveEdit;  // 菜单项-保存编辑
+        private System.Windows.Forms.ToolStripMenuItem itemStopEdit;  // 菜单项-结束编辑
+        private System.Windows.Forms.ToolStripSeparator toolStripSeparatorEdit;  // 菜单分隔线
+        private System.Windows.Forms.ToolStripMenuItem itemCreateFeature;  // 菜单项-创建要素
+        private System.Windows.Forms.ToolStripMenuItem itemUndo;  // 菜单项-撤销操作(Ctrl+Z)
 
+        // ==================== 主界面布局控件 ====================
+        private System.Windows.Forms.Splitter splitter1;  // 左侧分割线（TOC与主区域）
+        private System.Windows.Forms.Splitter splitter2;  // 左侧分割线（TOC与Tab）
+        private ESRI.ArcGIS.Controls.AxTOCControl axTOCControl2;  // 图层目录控件（专业模式）
+        private ESRI.ArcGIS.Controls.AxLicenseControl axLicenseControl1;  // ArcEngine许可证控件1
+        private ESRI.ArcGIS.Controls.AxLicenseControl axLicenseControl3;  // ArcEngine许可证控件3
 
-        private System.Windows.Forms.ToolStripMenuItem itemInitData;
-        private System.Windows.Forms.ToolStripMenuItem itemCheckDataQuality;
-        private System.Windows.Forms.ToolStripMenuItem itemDisplaceCoordinates;
-        private ESRI.ArcGIS.Controls.AxLicenseControl axLicenseControl1;
+        // ==================== Tab页切换控件 ====================
+        private System.Windows.Forms.TabControl tabControl1;  // 主Tab控件（数据/布局/演示）
+        private System.Windows.Forms.TabPage tabPage1;  // Tab页-数据视图
+        private System.Windows.Forms.TabPage tabPage2;  // Tab页-布局视图
+        private System.Windows.Forms.TabPage tabPageVisual;  // Tab页-可视化演示
+
+        // ==================== 数据视图控件 ====================
+        private ESRI.ArcGIS.Controls.AxMapControl axMapControl2;  // 专业模式地图控件
+
+        // ==================== 布局视图控件 ====================
+        private ESRI.ArcGIS.Controls.AxPageLayoutControl axPageLayoutControl1;  // 布局视图控件（制图输出）
+
+        // ==================== 可视化演示模式控件 ====================
+        private ESRI.ArcGIS.Controls.AxMapControl axMapControlVisual;  // 演示模式地图控件
+        private System.Windows.Forms.Panel panelVisualHeader;  // 演示模式-顶部工具栏面板
+        private System.Windows.Forms.TextBox txtVisualSearch;  // 演示模式-搜索框
+        private System.Windows.Forms.Button btnVisualSearch;  // 演示模式-查找非遗按钮
+        private System.Windows.Forms.Button btnVisualPan;  // 演示模式-漫游按钮
+        private System.Windows.Forms.Button btnVisualZoomIn;  // 演示模式-放大按钮
+        private System.Windows.Forms.Button btnVisualZoomOut;  // 演示模式-缩小按钮
+        private System.Windows.Forms.Button btnVisualFull;  // 演示模式-全图显示按钮
+        private System.Windows.Forms.Button btnVisualSync;  // 演示模式-同步数据按钮
+        private System.Windows.Forms.Button btnVisualArrow;  // 演示模式-指针工具按钮
+        private System.Windows.Forms.Button btnBackToPro;  // 演示模式-返回专业模式按钮
     }
 }

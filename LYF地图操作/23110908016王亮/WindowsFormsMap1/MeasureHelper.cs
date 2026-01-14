@@ -9,8 +9,8 @@ using ESRI.ArcGIS.Geometry;
 namespace WindowsFormsMap1
 {
     /// <summary>
-    /// 测量功能辅助类
-    /// 负责距离和面积的测量逻辑
+    /// 【地图量算助手】：提供交互式的距离与面积测量功能
+    /// 集成橡皮筋 (Rubber banding) 实时反馈与自动单位换算显示
     /// </summary>
     public class MeasureHelper
     {
@@ -33,20 +33,22 @@ namespace WindowsFormsMap1
             _mapControl = mapControl;
         }
 
+        // 【开启距离测量】：激活十字准星，记录分段长度与总长度
         public void StartMeasureDistance()
         {
-            Stop(); // 先停止之前的
+            Stop(); 
             IsMeasuringDistance = true;
             _mapControl.MousePointer = esriControlsMousePointer.esriPointerCrosshair;
-            ShowResultForm("请在地图上点击开始量算距离...");
+            ShowResultForm("交互测量模式：请在地图上点击确立起点...");
         }
 
+        // 【开启面积测量】：基于封闭多边形的拓扑闭合计算
         public void StartMeasureArea()
         {
-            Stop(); // 先停止之前的
+            Stop(); 
             IsMeasuringArea = true;
             _mapControl.MousePointer = esriControlsMousePointer.esriPointerCrosshair;
-            ShowResultForm("请在地图上点击绘制多边形...");
+            ShowResultForm("交互测量模式：请在地图上拉框绘制多边形...");
         }
 
         public void Stop()
@@ -79,10 +81,10 @@ namespace WindowsFormsMap1
         public void OnMouseDown(int x, int y)
         {
             IPoint point = _mapControl.ActiveView.ScreenDisplay.DisplayTransformation.ToMapPoint(x, y);
-
+ 
             if (IsMeasuringDistance)
             {
-                _startPoint = point; // 记录段起点
+                _startPoint = point; // 捕获当前段起点
                 if (_newLineFeedback == null)
                 {
                     _newLineFeedback = new NewLineFeedbackClass();
@@ -94,10 +96,8 @@ namespace WindowsFormsMap1
                 {
                     _newLineFeedback.AddPoint(point);
                 }
-                if (_segmentLength != 0)
-                {
-                    _totalLength += _segmentLength;
-                }
+                // 累加已完成的线段长度
+                if (_segmentLength != 0) _totalLength += _segmentLength;
             }
             else if (IsMeasuringArea)
             {
@@ -156,23 +156,25 @@ namespace WindowsFormsMap1
                     _newLineFeedback.Stop();
                     _newLineFeedback = null;
                 }
-                Stop(); // 结束测量状态
-                UpdateResultText("测量结束");
+                Stop(); 
+                UpdateResultText("测量已完成，量算逻辑已释放。");
             }
             else if (IsMeasuringArea)
             {
                 if (_newPolygonFeedback == null) return;
                 
+                // 拓扑闭合：获取最终多边形
                 IPolygon polygon = _newPolygonFeedback.Stop();
                 _newPolygonFeedback = null;
-                Stop(); // 结束测量状态
-
+                Stop(); 
+ 
                 if (polygon != null && !polygon.IsEmpty)
                 {
+                    // 几何简化：处理多边形自相交问题并计算代数面积
                     (polygon as ITopologicalOperator).Simplify();
                     polygon.Close();
                     IArea area = polygon as IArea;
-                    UpdateResultText(string.Format("面积为: {0:F2} 平方单位", Math.Abs(area.Area)));
+                    UpdateResultText(string.Format("测得闭合区域面积: {0:F2} 平方单位", Math.Abs(area.Area)));
                 }
             }
              _mapControl.MousePointer = esriControlsMousePointer.esriPointerArrow;

@@ -157,9 +157,18 @@ async function initCharts() {
     const catDom = document.getElementById('category-chart');
     categoryChart = echarts.init(catDom);
 
+    // [Agent Add] Initialize new charts
+    const cityRankDom = document.getElementById('city-rank-chart');
+    const trendDom = document.getElementById('trend-chart');
+
+    window.cityRankChart = cityRankDom ? echarts.init(cityRankDom) : null;
+    window.trendChart = trendDom ? echarts.init(trendDom) : null;
+
     window.addEventListener('resize', () => {
         chart.resize();
         categoryChart.resize();
+        if (window.cityRankChart) window.cityRankChart.resize();
+        if (window.trendChart) window.trendChart.resize();
     });
 
     // [New] Initialize Map Click Listeners
@@ -225,6 +234,31 @@ function initInteractions() {
 
     // [New] Time Slider initialization
     initTimeSlider();
+}
+
+// [Agent Add] Handle view switching - control stats charts visibility
+function handleViewChange(view) {
+    const statsChartsContainer = document.querySelector('.stats-charts-container');
+    const detailPlaceholder = document.getElementById('detail-placeholder');
+    const routeItinerary = document.getElementById('route-itinerary');
+
+    // Only show stats charts in overview mode
+    if (statsChartsContainer) {
+        if (view === 'overview' || !view) {
+            statsChartsContainer.style.display = 'block';
+        } else {
+            statsChartsContainer.style.display = 'none';
+        }
+    }
+
+    // Show/hide other panels based on view
+    if (view === 'route') {
+        if (detailPlaceholder) detailPlaceholder.style.display = 'none';
+        if (routeItinerary) routeItinerary.style.display = 'block';
+    } else {
+        if (detailPlaceholder) detailPlaceholder.style.display = 'block';
+        if (routeItinerary) routeItinerary.style.display = 'none';
+    }
 }
 
 let currentTimeBatch = 0; // 0 means all batches, 1-5 means cumulative
@@ -362,6 +396,13 @@ function renderDashboard(data) {
         renderCategoryChart(data.categories);
     }
 
+    // [Agent Add] Render new charts
+    if (data.statsByCity && data.statsByCity.length > 0) {
+        renderCityRankChart(data.statsByCity);
+    }
+    renderTrendChart(mapPoints);
+    renderHotList(mapPoints);
+
     mapPoints = data.points || [];
     renderMap(mapPoints);
 }
@@ -383,10 +424,194 @@ function renderCategoryChart(categories) {
     });
 }
 
+// [Agent Add] 地市排行榜 - 横向条形图
+function renderCityRankChart(cityData) {
+    if (!window.cityRankChart) return;
+
+    const top8 = cityData.slice(0, 8);
+    const names = top8.map(c => c.name);
+    const values = top8.map(c => c.value);
+
+    window.cityRankChart.setOption({
+        backgroundColor: 'transparent',
+        grid: {
+            left: '30%',
+            right: '10%',
+            top: '5%',
+            bottom: '5%'
+        },
+        xAxis: {
+            type: 'value',
+            axisLine: { show: false },
+            axisTick: { show: false },
+            axisLabel: { color: 'rgba(255,255,255,0.6)', fontSize: 11 },
+            splitLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } }
+        },
+        yAxis: {
+            type: 'category',
+            data: names,
+            axisLine: { show: false },
+            axisTick: { show: false },
+            axisLabel: { color: 'rgba(255,255,255,0.9)', fontSize: 12 }
+        },
+        series: [{
+            type: 'bar',
+            data: values.map((v, i) => ({
+                value: v,
+                itemStyle: {
+                    color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
+                        { offset: 0, color: i < 3 ? '#f59e0b' : '#667eea' },
+                        { offset: 1, color: i < 3 ? '#f97316' : '#764ba2' }
+                    ]),
+                    borderRadius: [0, 5, 5, 0]
+                }
+            })),
+            barWidth: '60%',
+            label: {
+                show: true,
+                position: 'right',
+                color: '#fff',
+                fontSize: 11,
+                formatter: (params) => {
+                    const medals = ['🥇', '🥈', '🥉'];
+                    return params.dataIndex < 3 ? medals[params.dataIndex] + ' ' + params.value : params.value;
+                }
+            }
+        }]
+    });
+}
+
+// [Agent Add] 申报批次趋势 - 折线图
+function renderTrendChart(points) {
+    if (!window.trendChart) return;
+
+    // 统计各虚拟批次的数量
+    const batchCount = {};
+    points.forEach(p => {
+        const batch = p.vBatch || 1;
+        batchCount[batch] = (batchCount[batch] || 0) + 1;
+    });
+
+    const batchNames = ['第一批\n(2006)', '第二批\n(2008)', '第三批\n(2011)', '第四批\n(2014)', '第五批\n(2021)'];
+    const batchValues = [1, 2, 3, 4, 5].map(b => batchCount[b] || 0);
+
+    window.trendChart.setOption({
+        backgroundColor: 'transparent',
+        grid: {
+            left: '15%',
+            right: '10%',
+            top: '15%',
+            bottom: '15%'
+        },
+        xAxis: {
+            type: 'category',
+            data: batchNames,
+            axisLine: { lineStyle: { color: 'rgba(255,255,255,0.2)' } },
+            axisTick: { show: false },
+            axisLabel: { color: 'rgba(255,255,255,0.7)', fontSize: 10, lineHeight: 14 }
+        },
+        yAxis: {
+            type: 'value',
+            axisLine: { show: false },
+            axisTick: { show: false },
+            axisLabel: { color: 'rgba(255,255,255,0.6)', fontSize: 10 },
+            splitLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } }
+        },
+        series: [{
+            type: 'line',
+            data: batchValues,
+            smooth: true,
+            lineStyle: {
+                width: 3,
+                color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
+                    { offset: 0, color: '#00d2ff' },
+                    { offset: 1, color: '#667eea' }
+                ])
+            },
+            areaStyle: {
+                color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                    { offset: 0, color: 'rgba(0, 210, 255, 0.3)' },
+                    { offset: 1, color: 'rgba(102, 126, 234, 0.1)' }
+                ])
+            },
+            itemStyle: {
+                color: '#00d2ff',
+                borderColor: '#fff',
+                borderWidth: 2
+            },
+            label: {
+                show: true,
+                position: 'top',
+                color: '#fff',
+                fontSize: 11,
+                fontWeight: 'bold'
+            }
+        }]
+    });
+}
+
+// [Agent Add] 热门非遗 TOP5 - 卡片列表
+function renderHotList(points) {
+    const hotListEl = document.getElementById('hot-list');
+    if (!hotListEl) return;
+
+    // 模拟热度数据(可后续接入真实点赞数)
+    const withPopularity = points.map(p => ({
+        ...p,
+        popularity: Math.floor(Math.random() * 200) + 50 // 模拟50-250的热度
+    }));
+
+    const top5 = withPopularity
+        .sort((a, b) => b.popularity - a.popularity)
+        .slice(0, 5);
+
+    hotListEl.innerHTML = top5.map((item, index) => `
+        <div class="hot-item" style="
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.2) 0%, rgba(118, 75, 162, 0.1) 100%);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 8px;
+            padding: 10px 12px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        " onclick="showDetail('${item.name}', '${item.category}', '${item.city}')"
+        onmouseover="this.style.transform='translateX(5px)'; this.style.borderColor='rgba(0,210,255,0.5)';"
+        onmouseout="this.style.transform='translateX(0)'; this.style.borderColor='rgba(255,255,255,0.1)';">
+            <div style="
+                width: 24px;
+                height: 24px;
+                background: ${index < 3 ? 'linear-gradient(135deg, #f59e0b, #f97316)' : 'rgba(255,255,255,0.1)'};
+                border-radius: 4px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-weight: bold;
+                color: #fff;
+                font-size: 12px;
+                flex-shrink: 0;
+            ">${index + 1}</div>
+            <div style="flex: 1; min-width: 0;">
+                <div style="color: rgba(255,255,255,0.95); font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                    ${item.name}
+                </div>
+                <div style="color: rgba(255,255,255,0.5); font-size: 11px; margin-top: 2px;">
+                    ${item.city} · ${item.category}
+                </div>
+            </div>
+            <div style="color: #f59e0b; font-size: 12px; font-weight: bold; flex-shrink: 0;">
+                🔥${item.popularity}
+            </div>
+        </div>
+    `).join('');
+}
+
+
 function renderMap(points) {
-    // 获取当前视野状态，防止刷新时重置缩放和中心点
+    // 获取当前视野状态,防止刷新时重置缩放和中心点
     const currentOpt = chart.getOption();
-    const currentGeo = currentOpt && currentOpt.geo && currentOpt.geo[0];
+    const currentGeo = currentOpt && currentOpt.geo && currentOpt.geo[0]; // [Agent Fix] 正确获取currentGeo
     const targetCenter = currentGeo ? currentGeo.center : [118.5, 36.4];
     const targetZoom = currentGeo ? currentGeo.zoom : 1.1;
 
@@ -1592,12 +1817,13 @@ function updateItineraryUI() {
         return;
     }
 
-    // [Member E] Added: Show saved routes button when no active route
-    const historyBtn = bridge ? `
+    // [Agent Fix] Show saved routes button always (removed bridge dependency)
+    // 历史路线按钮应该始终显示,点击时再检查bridge是否可用
+    const historyBtn = `
         <button class="card-btn card-btn-secondary" style="margin-top:10px; width:100%" onclick="showSavedRoutesPanel()">
             📋 历史路线
         </button>
-    ` : '';
+    `;
 
     if (routePoints.length === 0) {
         steps.innerHTML = `

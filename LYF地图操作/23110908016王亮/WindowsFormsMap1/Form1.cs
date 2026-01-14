@@ -16,26 +16,37 @@ namespace WindowsFormsMap1
     /// </summary>
     public partial class Form1 : Form
     {
+        // 【路线功能】：指向路径规划弹窗的引用
         private FormRoute _routeForm;
-        public FormSmartBuffer SmartBufferForm; // [Member C] Active Buffer Form
+        // 【缓冲区功能】：指向智能缓冲区配置窗口的引用
+        public FormSmartBuffer SmartBufferForm; 
 
-        // ... existing fields ...
+        // 核心 Helper 助手类（负责具体业务逻辑的底层实现）
+        private EditorHelper _editorHelper;    // 要素编辑助手
+        private MeasureHelper _measureHelper;   // 地图量测助手
+        private LayoutHelper _layoutHelper;     // 布局出图助手
+        // [Member C] 智能工具箱核心
+        public AnalysisHelper _analysisHelper; // 公开以便其他分部类访问
 
-        // [Member C] 
+        // 【绘图工具】：在地图上绘制临时点及索引标签（通常用于路径规划的节点展示）
         public void DrawTempPoint(IPoint pt, int index)
         {
             if (pt == null) return;
+            // 1. 创建标绘元素
             IMarkerElement markerEle = new MarkerElementClass();
             (markerEle as IElement).Geometry = pt;
+            // 设置符号样式：蓝色实心圆，大小为 8
             markerEle.Symbol = new SimpleMarkerSymbolClass { Color = new RgbColorClass { Red = 0, Green = 0, Blue = 255 }, Size = 8, Style = esriSimpleMarkerStyle.esriSMSCircle };
             axMapControl2.ActiveView.GraphicsContainer.AddElement(markerEle as IElement, 0);
-
-            // 添加文字标签 (使用 TextElement)
+ 
+            // 2. 添加文字序号标签
             ITextElement textEle = new TextElementClass { Text = index.ToString() };
             (textEle as IElement).Geometry = pt;
+            // 设置文字样式：黑色，大小 12
             textEle.Symbol = new TextSymbolClass { Size = 12, Color = new RgbColorClass { Red = 0, Green = 0, Blue = 0 } };
             axMapControl2.ActiveView.GraphicsContainer.AddElement(textEle as IElement, 0);
-
+ 
+            // 局部刷新图形层，避免全图刷新导致的闪烁
             axMapControl2.ActiveView.PartialRefresh(esriViewDrawPhase.esriViewGraphics, null, null);
         }
 
@@ -47,29 +58,32 @@ namespace WindowsFormsMap1
                 axMapControl2.ActiveView.Refresh();
             }
         }
-        private EditorHelper _editorHelper;
-        private MeasureHelper _measureHelper;
-        private LayoutHelper _layoutHelper;
         // [Member C] 智能工具箱核心
-        public AnalysisHelper _analysisHelper; // 公开以便其他分部类访问
 
-        // ================= 状态管理 =================
-        // ================= 状态管理 =================
+        // 【状态管理】：定义当前活动的地学工具模式
         public enum MapToolMode
         {
-            None, Pan, MeasureDistance, MeasureArea, CreateFeature,
-            // [Member C] 新增模式
-            BufferPoint, BufferLine, RouteStart, RouteEnd, QueryBox, QueryPolygon,
-            // [Member C] Multi-point route interaction
-            PickRoutePoint
+            None,           // 无工具（普通指针）
+            Pan,            // 漫游平移
+            MeasureDistance,// 长度量测
+            MeasureArea,    // 面积量测
+            CreateFeature,  // 创建新要素（属性编辑）
+            BufferPoint,    // 点缓冲区
+            BufferLine,     // 线缓冲区
+            RouteStart,     // 路径起点拾取
+            RouteEnd,       // 路径终点拾取
+            QueryBox,       // 拉框空间查询
+            QueryPolygon,   // 多边形空间查询
+            PickRoutePoint  // 多点路径规划拾取
         }
-        private MapToolMode _currentToolMode = MapToolMode.None;
-        private FormICHDetails _activeDetailsForm = null; // [Agent Add] 记录当前打开的详情窗体
-        private int _dashboardYear = 2025; // [Member B] Added: 缓存当前看板年份，用于事件驱动刷新
-        private bool _isHeatmapMode = false; // [Agent Add] 记录是否处于热力图模式
-        private UIHelper _ui;
-
-        public ISpatialReference MapSpatialReference => axMapControl2.SpatialReference; // [Agent Add] 暴露地图空间参考用于投影转换
+        private MapToolMode _currentToolMode = MapToolMode.None; // 记录当前选择的工具
+        private FormICHDetails _activeDetailsForm = null;     // 当前显示的非遗详情弹窗单例
+        private int _dashboardYear = 2025;                    // 看板当前过滤的全局年份
+        private bool _isHeatmapMode = false;                  // 是否处于热力图图层渲染模式
+        private UIHelper _ui;                                 // 界面辅助管理类
+ 
+        // 【空间参考】：暴露地图的坐标系信息，用于其他模块进行投影变换（如经纬度转平面坐标）
+        public ISpatialReference MapSpatialReference => axMapControl2.SpatialReference;
 
         public Form1()
         {
@@ -78,56 +92,55 @@ namespace WindowsFormsMap1
 
         private void Form1_Load(object sender, EventArgs e)
         {
-            // [Agent Add] 全局样式注入
+            // 1. 全局样式与视觉引擎注入（应用统一的玻璃拟态色调与图标库）
             ThemeEngine.ApplyTheme(this);
-            ApplyMenuIcons(); // 应用图标
+            ApplyMenuIcons(); 
             ThemeEngine.ApplyMenuStripTheme(menuStrip1);
             ThemeEngine.ApplyStatusStripTheme(statusStrip1);
             ThemeEngine.ApplyTabControlTheme(tabControl1);
             ThemeEngine.ApplyTOCTheme(axTOCControl2);
-
-            // 美化分割线与容器
+ 
+            // 2. 界面细节美化（调整分割线与容器底色）
             splitter1.BackColor = Color.FromArgb(226, 232, 240);
             splitter2.BackColor = Color.FromArgb(226, 232, 240);
             tabPage1.BackColor = Color.White;
             tabPage2.BackColor = Color.White;
-
-            // [New] 隐藏 TabControl 标签并创建自定义切换器
+ 
+            // 3. 自定义视图切换导航
+            // 隐藏原生 Tab 标签，改用左下角的悬浮按钮组控制“数据/布局/演示”模式
             tabControl1.ItemSize = new Size(0, 1);
             tabControl1.SizeMode = TabSizeMode.Fixed;
             InitViewSwitcher();
-
-            // 1. 初始化核心 Helper (必须在 UI 逻辑之前)
+ 
+            // 4. 初始化核心 Helper 助手类 (负责解耦 UI 与底层 GIS 算法)
             _measureHelper = new MeasureHelper(axMapControl2);
             _editorHelper = new EditorHelper(axMapControl2);
             _layoutHelper = new LayoutHelper(this.axPageLayoutControl1, this.axMapControl2);
             _ui = new UIHelper(this, axMapControl2, menuStrip1);
-            _analysisHelper = new AnalysisHelper(); // [Member C] 初始化
-
-            // 2. 基础事件绑定
+            _analysisHelper = new AnalysisHelper(); 
+ 
+            // 5. 基础事件绑定与图层关联
             axTOCControl2.OnMouseDown += AxTOCControl2_OnMouseDown;
-            axTOCControl2.SetBuddyControl(axMapControl2);
+            axTOCControl2.SetBuddyControl(axMapControl2); // 关联 TOC 与主地图
             this.tabControl1.SelectedIndexChanged += TabControl1_SelectedIndexChanged;
-
-            // [Member C] 初始化智能工具菜单 (优先加载)
-            this.InitSmartTools();
-            // [Member D] 初始化数据模块
-            // [Member D] Data Init removed (任务完成)
-
-            // 3. 使用异步调用确保 Handle 创建后再执行复杂 UI 同步
+ 
+            // 6. 初始化子功能模块
+            this.InitSmartTools(); // 初始化智能工具箱（路径规划等）
+ 
+            // 7. 异步加载数据与同步视图（防止 MXD 加载过程中的界面假死）
             this.BeginInvoke(new Action(() =>
             {
-                // 加载默认演示数据
+                // 自动加载默认的非遗地图文档（.mxd）
                 LoadDefaultMxd();
-
-                // [Member E] 集成：初始化鹰眼图 (此时 TabPage 等容器 Handle 已就绪)
+ 
+                // 初始化右下角的鹰眼联动功能
                 this.InitEagleEye();
-
-                // 强制进入演示模式逻辑
+ 
+                // 启动即进入演示模式，给观众最佳的视觉呈现
                 if (tabControl1.SelectedIndex != 2)
                     tabControl1.SelectedIndex = 2;
                 else
-                    TabControl1_SelectedIndexChanged(null, null); // 即使索引已经是2也强制触发
+                    TabControl1_SelectedIndexChanged(null, null); 
             }));
         }
 
