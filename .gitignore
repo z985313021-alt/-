@@ -14,3 +14,6 @@ NetworkCache/
 
 # User specific
 .vs/
+
+# Data (Exclude from Cloud, Keep locally)
+**/370000.geojson
