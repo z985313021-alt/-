@@ -105,7 +105,9 @@ namespace WindowsFormsMap1
                 lblInfo.Text = "算法计算中，请稍候...";
 
                 // 调用分析引擎执行多点路径搜索
-                IPolyline result = _analyzer.FindShortestPath(_routePoints);
+                // [Agent] Fixed: FindShortestPath now returns RouteResult
+                var rr = _analyzer.FindShortestPath(_routePoints);
+                IPolyline result = rr?.PathLine;
 
                 this.Cursor = Cursors.Default;
 

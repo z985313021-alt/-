@@ -133,7 +133,9 @@ namespace WindowsFormsMap1
             try
             {
                 // 指令分发：调用 Dijkstra 核心算法进行路径追踪
-                IPolyline result = _analysisHelper.FindShortestPath(_routeStart, _routeEnd);
+                // [Agent] Fixed: FindShortestPath now returns RouteResult
+                var rr = _analysisHelper.FindShortestPath(_routeStart, _routeEnd);
+                IPolyline result = rr?.PathLine;
                 if (result != null)
                 {
                     // 结果落画：将生成的几何路径以红色高亮的形式绘制在地图 Graphics 层

@@ -549,10 +549,12 @@ namespace WindowsFormsMap1
             {
                 // 1. 系统智能扫描：在项目周边目录寻找数据根路径
                 string rootDataDir = FindDataRootDirectory("数据资源");
+                // [Use Agent Fallback] 兼容团队成员的命名习惯
+                if (string.IsNullOrEmpty(rootDataDir)) rootDataDir = FindDataRootDirectory("山东省arcgis处理数据及底图");
 
                 if (string.IsNullOrEmpty(rootDataDir))
                 {
-                    MessageBox.Show("演示模式数据包缺失，请检查：数据资源", "路径探测失败");
+                    MessageBox.Show("演示模式数据包缺失，请检查：数据资源 或 山东省arcgis处理数据及底图", "路径探测失败");
                     return;
                 }
 
@@ -1012,6 +1014,8 @@ namespace WindowsFormsMap1
             }
 
             // 2. 高亮路网轨迹：对构成路径的所有路段进行选择集渲染
+            // [Agent] Disabled: 仅显示 pathLine 几何，避免高亮整个 Feature 导致视觉杂乱（因为 Feature 可能很长）
+            /*
             if (route.RoadFeatures != null && route.RoadFeatures.Count > 0)
             {
                 IFeatureLayer roadLayer = null;
@@ -1034,11 +1038,21 @@ namespace WindowsFormsMap1
                     foreach (var f in route.RoadFeatures) selSet.Add(f.OID);
                 }
             }
+            */
 
             // 3. 绘制路径示意线：在 Graphics 容器中绘制连线，确保路径逻辑清晰
             IGeometry lineGeo = route.PathLine;
             if (lineGeo != null && !lineGeo.IsEmpty)
             {
+                // [Agent] Fix: Project geometry to map spatial reference
+                // 确保几何体坐标系与当前地图一致，防止因投影不同导致绘制飞到天边或缩成一点
+                if (lineGeo.SpatialReference != null && axMapControlVisual.SpatialReference != null &&
+                    lineGeo.SpatialReference.FactoryCode != axMapControlVisual.SpatialReference.FactoryCode)
+                {
+                    lineGeo = (lineGeo as ESRI.ArcGIS.esriSystem.IClone).Clone() as IGeometry;
+                    lineGeo.Project(axMapControlVisual.SpatialReference);
+                }
+
                 SimpleLineSymbolClass lineSym = new SimpleLineSymbolClass();
                 lineSym.Color = new RgbColorClass { Red = 0, Green = 255, Blue = 255 }; // 青色醒目连线
                 lineSym.Width = 5;
