@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Data;
 using System.Data.SqlClient;
 using System.Windows.Forms;
+using System.Text;
 
 namespace WindowsFormsMap1
 {
@@ -35,7 +36,7 @@ namespace WindowsFormsMap1
         }
 
         // 执行增删改 (Insert/Update/Delete)
-        public static int ExecuteNonQuery(string sql, SqlParameter[] parameters = null)
+        public static int ExecuteNonQuery(string sql, params SqlParameter[] parameters)
         {
             try
             {
@@ -57,7 +58,7 @@ namespace WindowsFormsMap1
         }
 
         // 执行查询返回 DataTable
-        public static DataTable ExecuteQuery(string sql, SqlParameter[] parameters = null)
+        public static DataTable ExecuteQuery(string sql, params SqlParameter[] parameters)
         {
             DataTable dt = new DataTable();
             try
@@ -83,7 +84,7 @@ namespace WindowsFormsMap1
         }
 
         // 查询单个值 (例如 Count)
-        public static object ExecuteScalar(string sql, SqlParameter[] parameters = null)
+        public static object ExecuteScalar(string sql, params SqlParameter[] parameters)
         {
             try
             {
@@ -100,6 +101,57 @@ namespace WindowsFormsMap1
             catch
             {
                 return null;
+            }
+        }
+
+        // [Member E] Added: 执行查询并返回JSON字符串（手动序列化，不依赖Newtonsoft）
+        public static string ExecuteJsonQuery(string sql, params SqlParameter[] parameters)
+        {
+            try
+            {
+                DataTable dt = ExecuteQuery(sql, parameters);
+                if (dt == null || dt.Rows.Count == 0)
+                    return "[]";
+
+                StringBuilder json = new StringBuilder();
+                json.Append("[");
+
+                for (int i = 0; i < dt.Rows.Count; i++)
+                {
+                    json.Append("{");
+                    for (int j = 0; j < dt.Columns.Count; j++)
+                    {
+                        json.Append("\"").Append(dt.Columns[j].ColumnName).Append("\":");
+                        
+                        object value = dt.Rows[i][j];
+                        if (value == null || value is DBNull)
+                        {
+                            json.Append("null");
+                        }
+                        else if (value is string || value is DateTime)
+                        {
+                            json.Append("\"").Append(value.ToString().Replace("\"", "\\\"")).Append("\"");
+                        }
+                        else
+                        {
+                            json.Append(value.ToString());
+                        }
+
+                        if (j < dt.Columns.Count - 1)
+                            json.Append(",");
+                    }
+                    json.Append("}");
+                    if (i < dt.Rows.Count - 1)
+                        json.Append(",");
+                }
+
+                json.Append("]");
+                return json.ToString();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("ExecuteJsonQuery Error: " + ex.Message);
+                return "[]";
             }
         }
     }

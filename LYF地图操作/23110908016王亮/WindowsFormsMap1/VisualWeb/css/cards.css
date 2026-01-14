@@ -435,6 +435,10 @@
 .ich-card.side-open {
     width: 1200px;
     /* 加宽到 1200px */
+    height: 700px;
+    /* [Member E] Increased to 700px for more content space */
+    max-height: 90vh;
+    /* [Member E] Increased to 90vh */
     background: transparent;
     box-shadow: none;
     border: none;
@@ -564,11 +568,15 @@
 
     /* 手机改为垂直滚动布局 */
     .ich-card.side-open {
-        width: 100%;
-        height: 100%;
-        overflow-y: auto;
-        border-radius: 20px;
-        background: white;
+        max-width: 90vw;
+        max-height: 85vh;
+        /* [Member E] Increased from default */
+        width: 1000px;
+        height: 600px;
+        /* [Member E] Increased base height */
+        display: flex;
+        flex-direction: row;
+        transform: scale(1);
         pointer-events: auto;
     }
 

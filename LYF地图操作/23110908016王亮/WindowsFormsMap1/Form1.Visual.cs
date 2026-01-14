@@ -1648,5 +1648,5 @@ namespace WindowsFormsMap1
             }
             catch (Exception) { }
         }
-    }
+    } // End of partial class
 }

@@ -215,5 +215,94 @@ namespace WindowsFormsMap1
             public int totalItems { get; set; }
             public string lastUpdated { get; set; }
         }
+
+        // [Member E] Added: 路线保存功能 - 保存路线起终点到数据库
+        public bool SaveRoute(string routeName, double startLng, double startLat,
+                              double endLng, double endLat, string ichItemsJson, string description)
+        {
+            try
+            {
+                System.Diagnostics.Debug.WriteLine($"[SaveRoute] 开始保存路线: {routeName}");
+                System.Diagnostics.Debug.WriteLine($"[SaveRoute] 起点: ({startLng}, {startLat}), 终点: ({endLng}, {endLat})");
+
+                // 插入路线记录到数据库
+                string insertRoute = @"
+                    INSERT INTO Saved_Routes 
+                    (RouteName, StartLng, StartLat, EndLng, EndLat, Description)
+                    VALUES (@name, @sLng, @sLat, @eLng, @eLat, @desc);
+                    SELECT SCOPE_IDENTITY();";
+
+                object result = DBHelper.ExecuteScalar(insertRoute,
+                    new System.Data.SqlClient.SqlParameter("@name", routeName),
+                    new System.Data.SqlClient.SqlParameter("@sLng", startLng),
+                    new System.Data.SqlClient.SqlParameter("@sLat", startLat),
+                    new System.Data.SqlClient.SqlParameter("@eLng", endLng),
+                    new System.Data.SqlClient.SqlParameter("@eLat", endLat),
+                    new System.Data.SqlClient.SqlParameter("@desc", description ?? ""));
+
+                if (result == null)
+                {
+                    System.Diagnostics.Debug.WriteLine("[SaveRoute] ExecuteScalar返回null");
+                    return false;
+                }
+
+                int routeId = Convert.ToInt32(result);
+                System.Diagnostics.Debug.WriteLine($"[SaveRoute] 路线保存成功: ID={routeId}");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[SaveRoute] Error: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[SaveRoute] StackTrace: {ex.StackTrace}");
+                return false;
+            }
+        }
+
+        // [Member E] Added: 获取历史路线列表
+        public string GetSavedRoutes()
+        {
+            try
+            {
+                string sql = @"
+                    SELECT ID, RouteName, CreatedDate, Description,
+                           CAST(StartLng AS VARCHAR) + ',' + CAST(StartLat AS VARCHAR) AS StartPoint,
+                           CAST(EndLng AS VARCHAR) + ',' + CAST(EndLat AS VARCHAR) AS EndPoint
+                    FROM Saved_Routes
+                    ORDER BY CreatedDate DESC";
+
+                return DBHelper.ExecuteJsonQuery(sql);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[GetSavedRoutes] Error: {ex.Message}");
+                return "[]";
+            }
+        }
+
+        // [Member E] Added: 获取特定路线的详细信息
+        public string GetRouteDetail(int routeId)
+        {
+            try
+            {
+                string sql = $@"
+                    SELECT ID, RouteName, StartLng, StartLat, EndLng, EndLat, Description, CreatedDate
+                    FROM Saved_Routes
+                    WHERE ID = {routeId}";
+
+                string result = DBHelper.ExecuteJsonQuery(sql);
+                
+                // 返回第一条记录（去掉数组括号）
+                if (result.StartsWith("[") && result.EndsWith("]") && result.Length > 2)
+                {
+                    return result.Substring(1, result.Length - 2);
+                }
+                return result;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[GetRouteDetail] Error: {ex.Message}");
+                return "{}";
+            }
+        }
     }
 }
