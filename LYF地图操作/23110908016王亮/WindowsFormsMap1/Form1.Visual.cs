@@ -1207,8 +1207,8 @@ namespace WindowsFormsMap1
         {
             _isHeatmapMode = false;
 
-            // 步骤 1：撤销年份过滤限制（2099 表示显示未来至无穷的时间节点）
-            FilterMapByYear(2099);
+            // 步骤 1：撤销年份过滤限制（2030 表示显示未来至无穷的时间节点）
+            FilterMapByYear(2030);
 
             // 步骤 2：触发地图图层全量同步，通过强制刷新逻辑清除热力图的符号遮罩
             SyncToVisualMode(true);
