@@ -1153,29 +1153,34 @@ namespace WindowsFormsMap1
 
 
 
+        // 【自适应递归搜索算法】：在项目目录树中智能查找指定的数据文件夹
+        // 核心逻辑：从程序当前运行目录 (bin/Debug) 开始，逐级向上爬升查找，直到找到目标或达到最大递归深度。
         private string FindDataRootDirectory(string targetDirName)
         {
-            string current = Application.StartupPath;
+            string current = Application.StartupPath; // 起点：通常是 bin\Debug
+
+            // 设定最大搜索深度为 6 层，防止无限递归导致死循环或性能损耗
+            // 这足以覆盖从 Debug 目录回溯到 项目根目录 甚至 解决方案根目录 的范围
             for (int i = 0; i < 6; i++)
             {
-                string path = System.IO.Path.Combine(current, targetDirName);
-                // Also check if targetDirName is in a sibling folder (common in dev envs structure like '1.8/-')
-
-                // Check direct subdirectory
+                // 1. 尝试直接在当前目录下寻找名为 targetDirName 的子文件夹
+                // 例如：Checking C:\Projects\MyMap\bin\Debug\数据资源
                 string[] dirs = System.IO.Directory.GetDirectories(current, targetDirName, System.IO.SearchOption.TopDirectoryOnly);
-                if (dirs.Length > 0) return dirs[0];
+                if (dirs.Length > 0) return dirs[0]; // 🎯 命中目标，直接返回完整路径
 
-                // Special case for the user structure seen: "源代码\数据资源"
+                // 2. 特殊结构兼容：适配某些团队成员习惯将资源放在 "源代码" 子目录下的情况
+                // 例如：Checking C:\Projects\MyMap\源代码\数据资源
                 string lyfPath = System.IO.Path.Combine(current, "源代码", targetDirName);
                 if (System.IO.Directory.Exists(lyfPath)) return lyfPath;
 
-                // Move up
+                // 3. 向上回溯：如果没有找到，则退回到上一级父目录，准备进行下一轮搜索
+                // 例如：从 bin\Debug 退回到 bin，再退回 MyMap...
                 var parent = System.IO.Directory.GetParent(current);
-                if (parent == null) break;
+                if (parent == null) break; // 已到达磁盘根目录，停止搜索
                 current = parent.FullName;
             }
-            // Broad search for the directory if simple traversal fails? 
-            // Better to stay safe and just return null if not found near project.
+
+            // 遍历所有可能的层级后仍未找到，返回 null 表示探测失败
             return null;
         }
 
