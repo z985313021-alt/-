@@ -1125,17 +1125,24 @@ namespace WindowsFormsMap1
             axMapControlVisual.ActiveView.PartialRefresh(esriViewDrawPhase.esriViewGeoSelection, null, null);
         }
 
-        // [Member E] Modified: 修复同步逻辑，确保地图图层正确复制且不发生冲突
+        // [Member E] Modified: 修复同步逻辑,确保地图图层正确复制且不发生冲突
         private void SyncToVisualMode(bool force = false)
         {
             if (axMapControlVisual == null || axMapControl2 == null) return;
             try
             {
                 // [Member E] 同步专业版底图到演示版
-                // 仅在首次加载或用户明确同步时执行，或者强制同步时执行
-                if (force || (axMapControlVisual.LayerCount == 0 && axMapControl2.LayerCount > 0))
+                // [Agent Fix] 优化同步条件:
+                // 1. force=true 时强制同步(用户更换了mxd时)
+                // 2. 演示视图为空但专业视图有图层时自动同步(首次加载)
+                // 3. 演示视图图层数量与专业视图不一致时同步(可能换了mxd)
+                bool needSync = force ||
+                               (axMapControlVisual.LayerCount == 0 && axMapControl2.LayerCount > 0) ||
+                               (axMapControlVisual.LayerCount != axMapControl2.LayerCount);
+
+                if (needSync)
                 {
-                    // 深度克隆地图对象（避免引用冲突引发的 COM 异常）
+                    // 深度克隆地图对象(避免引用冲突引发的 COM 异常)
                     try
                     {
                         ESRI.ArcGIS.Carto.IMap clonedMap = UIHelper.CloneMap(axMapControl2.Map);
@@ -1246,10 +1253,18 @@ namespace WindowsFormsMap1
             RenderCityChoropleth(_dashboardYear);
 
             _isHeatmapActive = true;
+
+            // [Agent Fix] 关键修复:正确设置热力图模式标志
+            // 这样FilterMapByYear才能正确响应时间轴变化
+            _isHeatmapMode = true;
         }
 
         private void ResetRenderer()
         {
+            // [Agent Fix] 关键修复:清除热力图模式标志
+            // 防止切换回全景模式后仍应用热力图渲染
+            _isHeatmapMode = false;
+
             // 恢复普通点展示 (通过 FilterMapByYear 解除过滤并重置 Renderer 也可以，或者简单全图刷新)
             // 先重置数据过滤，显示全部数据
             FilterMapByYear(2099);
@@ -1640,7 +1655,8 @@ namespace WindowsFormsMap1
                 ApplyYearFilterToControl(axMapControl2, year);
                 ApplyYearFilterToControl(axMapControlVisual, year);
 
-                // 3. [Agent Add] 如果处于热力图模式，同步重绘分级色彩
+                // 3. [Agent Fix] 仅在热力图模式下更新分级色彩
+                // 这样可以避免在全景模式下误应用热力图渲染
                 if (_isHeatmapMode)
                 {
                     RenderCityChoropleth(year);
