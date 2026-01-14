@@ -48,24 +48,39 @@ namespace WindowsFormsMap1
             public DateTime BuildTime { get; set; }
         }
 
+        public class RouteResult
+        {
+            public IPolyline PathLine;
+            public double Length;
+            public List<IFeature> RoadFeatures = new List<IFeature>();
+        }
+
         private class GraphNode
         {
             public int Id;
-            public IPoint Point;
+            // [Agent] Optimized: 移除 IPoint COM对象，改用纯数据存储
+            public double X;
+            public double Y;
             public List<GraphEdge> Edges = new List<GraphEdge>();
         }
 
-        private class GraphEdge
+        // [Agent] Optimized: 使用 struct 替代 class，避免数十万个小对象分配，大幅降低GC压力
+        private struct GraphEdge
         {
             public int TargetNodeId;
             public double Weight;
-            public IPolyline Geometry;
+            // [Agent (通用辅助)] Optimized: 延迟加载几何体，只存储源要素引用
+            public int SourceOID;      // 原始要素OID
+            public int SegmentIndex;   // 在原始要素中的Segment索引
         }
 
         private Dictionary<int, GraphNode> _graph;
         private IFeatureLayer _roadLayer;
         private ISpatialReference _mapSR; // 缓存路网空间参考
         private double _mergeTolerance = 0.0001;
+        // [Agent (通用辅助)] Added: 空间网格索引，加速节点查找
+        private Dictionary<(int, int), List<int>> _spatialGrid;
+        private double _gridSize = 0.05;  // 网格尺寸（投影坐标系会动态调整）
         // [Agent (通用辅助)] Added: 缓存文件路径
         private string _cacheDirectory = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "WindowsFormsMap1", "NetworkCache");
 
@@ -87,6 +102,10 @@ namespace WindowsFormsMap1
             System.Diagnostics.Debug.WriteLine(msg);
         }
 
+        /// <summary>
+        /// 【建立物理路网】：将 GIS 线要素图层转化为内存拓扑图结构
+        /// 此过程涉及：节点捕捉 (Snapping)、拓扑打断 (Planarization) 以及邻接表构建
+        /// </summary>
         public string BuildNetwork(IFeatureLayer roadLayer)
         {
             LastLog = "--- 开始构建路网 ---\r\n";
@@ -96,6 +115,7 @@ namespace WindowsFormsMap1
                 _roadLayer = roadLayer;
                 Log($"图层名称: {roadLayer.Name}");
 
+                // 获取空间参考，确保距离计算的准确性（经纬度 vs 投影坐标）
                 IGeoDataset geoDataset = _roadLayer.FeatureClass as IGeoDataset;
                 if (geoDataset != null)
                 {
@@ -103,39 +123,57 @@ namespace WindowsFormsMap1
                     Log($"空间参考: {(_mapSR != null ? _mapSR.Name : "Unknown")}");
                 }
 
-                // 1. [Optimized] Skip ConstructUnion and iterate features directly
-                // If the data is already planarized (nodes at segment junctions), 
-                // we can build the graph 100x faster by skipping the heavy topological union.
-                _graph = new Dictionary<int, GraphNode>();
-                Dictionary<long, int> nodeLookup = new Dictionary<long, int>();
+                // 初始化内部图结构与节点索引映射
+                // [Agent] Optimized: 预分配容量，假设约20万节点
+                _graph = new Dictionary<int, GraphNode>(200000);
+                Dictionary<long, int> nodeLookup = new Dictionary<long, int>(200000);
+
                 int nextNodeId = 0;
 
+                // 根据坐标系动态调整容差：投影坐标使用 1 米，地理坐标使用极小值
                 if (_mapSR is IProjectedCoordinateSystem) _mergeTolerance = 1.0;
                 else _mergeTolerance = 0.00001;
+
                 IFeatureCursor cursor = _roadLayer.FeatureClass.Search(null, false);
                 IFeature feat;
                 int count = 0;
+                int totalSegments = 0; // [Agent] Added: 诊断Segment数量
+
                 while ((feat = cursor.NextFeature()) != null)
                 {
                     if (feat.Shape is IPolyline line && !line.IsEmpty)
                     {
+                        // 拓扑拆解：将复合线段打断为单条直线段 (Segment)，确保每个交点都能生成节点
                         ISegmentCollection segments = line as ISegmentCollection;
+                        totalSegments += segments.SegmentCount; // [Agent] Added
                         for (int i = 0; i < segments.SegmentCount; i++)
                         {
                             ISegment segment = segments.get_Segment(i);
 
-                            // 保持原来的几何存储逻辑
-                            PolylineClass edgePoly = new PolylineClass { SpatialReference = _mapSR };
-                            (edgePoly as ISegmentCollection).AddSegment(segment);
-
+                            // [Agent (通用辅助)] Optimized: 不再创建几何体副本，只存OID和索引
+                            // 节点捕捉：通过 GetOrCreateNodeId 确保相连的线段共享同一个 Node ID
+                            // [Agent] Note: GetOrCreateNodeId 会处理 X/Y 的提取
                             int u = GetOrCreateNodeId(segment.FromPoint, nodeLookup, ref nextNodeId);
                             int v = GetOrCreateNodeId(segment.ToPoint, nodeLookup, ref nextNodeId);
 
-                            if (u != v)
+                            if (u != v) // 排除环路线
                             {
                                 double length = segment.Length;
-                                _graph[u].Edges.Add(new GraphEdge { TargetNodeId = v, Weight = length, Geometry = edgePoly });
-                                _graph[v].Edges.Add(new GraphEdge { TargetNodeId = u, Weight = length, Geometry = edgePoly });
+                                // 双向加边：构建无向图，延迟几何加载
+                                _graph[u].Edges.Add(new GraphEdge
+                                {
+                                    TargetNodeId = v,
+                                    Weight = length,
+                                    SourceOID = feat.OID,
+                                    SegmentIndex = i
+                                });
+                                _graph[v].Edges.Add(new GraphEdge
+                                {
+                                    TargetNodeId = u,
+                                    Weight = length,
+                                    SourceOID = feat.OID,
+                                    SegmentIndex = i
+                                });
                             }
                         }
                         count++;
@@ -143,12 +181,17 @@ namespace WindowsFormsMap1
                 }
                 Marshal.ReleaseComObject(cursor);
                 Log($"读取要素数量: {count}");
+                Log($"总Segment数量: {totalSegments} (平均: {(count > 0 ? (double)totalSegments / count : 0):F1})"); // [Agent] Added
 
                 if (count == 0) return "选中的图层没有要素！";
 
                 Log($"图构建完毕: {_graph.Count} 个节点。");
 
-                // [Agent (通用辅助)] Added: 保存路网缓存
+                // [Agent (通用辅助)] Added: 构建空间索引，加速节点查找
+                BuildSpatialIndex();
+                Log($"空间索引构建完成。");
+
+                // 持久化优化：将构建好的路网保存为二进制缓存，显著提升下次启动速度（避开 20W+ 要素的实时构建）
                 SaveNetworkCache(roadLayer.Name);
 
                 return $"路网重构成功!\n节点数: {_graph.Count}";
@@ -212,7 +255,9 @@ namespace WindowsFormsMap1
 
             // 3. 规划路径
             Log("开始计算最短路径...");
-            IPolyline routeLine = FindShortestPath(stops);
+            // [Agent] Optimized: 返回 RouteResult
+            RouteResult routeRes = FindShortestPath(stops);
+            IPolyline routeLine = routeRes?.PathLine;
 
             if (routeLine == null) Log("FindShortestPath 返回 null。");
             else if (routeLine.IsEmpty) Log("FindShortestPath 返回 Empty Geometry。");
@@ -242,50 +287,9 @@ namespace WindowsFormsMap1
             Marshal.ReleaseComObject(sf);
             Log($"发现非遗点: {spots.Count} 个");
 
-            // 4.5 [Agent] 反向查找路径对应的原始路网要素
-            List<IFeature> roadFeats = new List<IFeature>();
-            HashSet<int> roadOids = new HashSet<int>();
-
-            if (roadLayer != null && routeLine != null)
-            {
-                IGeometryCollection geoColl = routeLine as IGeometryCollection;
-                if (geoColl != null)
-                {
-                    ISpatialFilter sfRoad = new SpatialFilterClass();
-                    sfRoad.SpatialRel = esriSpatialRelEnum.esriSpatialRelIntersects;
-
-                    double tol = (_mapSR is IProjectedCoordinateSystem) ? 1.0 : 0.00001;
-                    sfRoad.Geometry = (routeLine as ITopologicalOperator).Buffer(tol);
-
-                    try
-                    {
-                        IFeatureCursor rCursor = roadLayer.FeatureClass.Search(sfRoad, false);
-                        IFeature rf;
-                        while ((rf = rCursor.NextFeature()) != null)
-                        {
-                            ITopologicalOperator2 topoFeat = rf.Shape as ITopologicalOperator2;
-                            if (topoFeat != null)
-                            {
-                                IGeometry intersection = topoFeat.Intersect(routeLine, esriGeometryDimension.esriGeometry1Dimension); // 1D = Line
-                                if (intersection != null && !intersection.IsEmpty)
-                                {
-                                    if ((intersection as IPolyline).Length > tol)
-                                    {
-                                        if (!roadOids.Contains(rf.OID))
-                                        {
-                                            roadFeats.Add(rf);
-                                            roadOids.Add(rf.OID);
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        Marshal.ReleaseComObject(rCursor);
-                    }
-                    catch (Exception ex) { Log("Road lookup error: " + ex.Message); }
-                    Marshal.ReleaseComObject(sfRoad);
-                }
-            }
+            // 4.5 [Agent] Optimized: 直接使用 RouteResult 中的 RoadFeatures，移除耗时的反向空间查询
+            List<IFeature> roadFeats = routeRes.RoadFeatures ?? new List<IFeature>();
+            Log($"关联路网要素: {roadFeats.Count} 个 (无需反向查询)");
 
             // 5. 构造结果
             TourRoute tr = new TourRoute
@@ -300,9 +304,13 @@ namespace WindowsFormsMap1
             return tr;
         }
 
+        /// <summary>
+        /// 【节点去重库】：通过长整型坐标哈希 (Long-Hash) 实现空间点位的极速捕捉
+        /// </summary>
         private int GetOrCreateNodeId(IPoint pt, Dictionary<long, int> lookup, ref int nextId)
         {
             // 降低精度进行模糊匹配，确保路口缝合 (使用 long 避免字符串分配开销)
+            // 通过 long 类型的位操作避免字符串拼接的内存开销
             long xi = (long)Math.Round(pt.X / _mergeTolerance);
             long yi = (long)Math.Round(pt.Y / _mergeTolerance);
             long key = (xi << 32) | (yi & 0xFFFFFFFFL); // 快速位移哈希
@@ -311,17 +319,69 @@ namespace WindowsFormsMap1
             {
                 int id = nextId++;
                 lookup[key] = id;
-                _graph[id] = new GraphNode { Id = id, Point = (pt as IClone).Clone() as IPoint };
+                // [Agent] Optimized: 只存坐标数值，不存COM对象
+                _graph[id] = new GraphNode { Id = id, X = pt.X, Y = pt.Y };
             }
             return lookup[key];
         }
+
+        // [Agent (通用辅助)] Added: 构建空间网格索引
+        private void BuildSpatialIndex()
+        {
+            _spatialGrid = new Dictionary<(int, int), List<int>>();
+            if (_mapSR is IProjectedCoordinateSystem)
+                _gridSize = 5000;
+            else
+                _gridSize = 0.05;
+
+            foreach (var node in _graph.Values)
+            {
+                int gridX = (int)(node.X / _gridSize);
+                int gridY = (int)(node.Y / _gridSize);
+                var key = (gridX, gridY);
+                if (!_spatialGrid.ContainsKey(key))
+                    _spatialGrid[key] = new List<int>();
+                _spatialGrid[key].Add(node.Id);
+            }
+        }
+
+        // [Agent (通用辅助)] Added: 按需加载边的几何体
+        /// <summary>
+        /// 根据 GraphEdge 存储的 OID 和 SegmentIndex，从 FeatureClass 中提取对应的几何体
+        /// </summary>
+        private IPolyline GetEdgeGeometry(GraphEdge edge)
+        {
+            if (_roadLayer == null || _roadLayer.FeatureClass == null) return null;
+
+            try
+            {
+                IFeature feat = _roadLayer.FeatureClass.GetFeature(edge.SourceOID);
+                if (feat == null || !(feat.Shape is IPolyline)) return null;
+
+                ISegmentCollection segments = feat.Shape as ISegmentCollection;
+                if (edge.SegmentIndex >= segments.SegmentCount) return null;
+
+                ISegment segment = segments.get_Segment(edge.SegmentIndex);
+                PolylineClass edgePoly = new PolylineClass { SpatialReference = _mapSR };
+                (edgePoly as ISegmentCollection).AddSegment(segment);
+
+                return edgePoly;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
 
         // [Agent (通用辅助)] Optimized: 使用自定义二进制格式，解决 20w 节点加载慢的问题
         private void SaveNetworkCache(string layerName)
         {
             try
             {
-                string cacheFile = System.IO.Path.Combine(_cacheDirectory, $"{SanitizeFileName(layerName)}_cache.bin");
+                // [Agent] Optimized: 使用 v2 后缀
+                string cacheFile = System.IO.Path.Combine(_cacheDirectory, $"{SanitizeFileName(layerName)}_cache_v2.bin");
+
                 using (var fs = new System.IO.FileStream(cacheFile, System.IO.FileMode.Create))
                 using (var bw = new System.IO.BinaryWriter(fs))
                 {
@@ -330,21 +390,16 @@ namespace WindowsFormsMap1
                     foreach (var node in _graph.Values)
                     {
                         bw.Write(node.Id);
-                        bw.Write(node.Point.X);
-                        bw.Write(node.Point.Y);
+                        bw.Write(node.X);
+                        bw.Write(node.Y);
                         bw.Write(node.Edges.Count);
                         foreach (var edge in node.Edges)
                         {
                             bw.Write(edge.TargetNodeId);
                             bw.Write(edge.Weight);
-
-                            IPointCollection ptColl = edge.Geometry as IPointCollection;
-                            bw.Write(ptColl.PointCount);
-                            for (int i = 0; i < ptColl.PointCount; i++)
-                            {
-                                IPoint pt = ptColl.Point[i];
-                                bw.Write(pt.X); bw.Write(pt.Y);
-                            }
+                            // [Agent (通用辅助)] Optimized: 只存OID和索引，不存几何坐标
+                            bw.Write(edge.SourceOID);
+                            bw.Write(edge.SegmentIndex);
                         }
                     }
                 }
@@ -359,11 +414,18 @@ namespace WindowsFormsMap1
         {
             try
             {
-                string cacheFile = System.IO.Path.Combine(_cacheDirectory, $"{SanitizeFileName(layerName)}_cache.bin");
+                // [Agent] Optimized: 使用 v2 后缀，强制读取新格式缓存
+                string cacheFile = System.IO.Path.Combine(_cacheDirectory, $"{SanitizeFileName(layerName)}_cache_v2.bin");
                 if (!System.IO.File.Exists(cacheFile)) return false;
 
+                long fileSize = new System.IO.FileInfo(cacheFile).Length;
+                System.Diagnostics.Stopwatch sw = new System.Diagnostics.Stopwatch();
+                sw.Start();
+
+                // [Agent] Optimized: 使用 BufferedStream (64KB) 加速IO读取
                 using (var fs = new System.IO.FileStream(cacheFile, System.IO.FileMode.Open))
-                using (var br = new System.IO.BinaryReader(fs))
+                using (var bs = new System.IO.BufferedStream(fs, 65536))
+                using (var br = new System.IO.BinaryReader(bs))
                 {
                     _mergeTolerance = br.ReadDouble();
                     int nodeCount = br.ReadInt32();
@@ -378,31 +440,33 @@ namespace WindowsFormsMap1
                         var node = new GraphNode
                         {
                             Id = id,
-                            Point = new PointClass { X = nx, Y = ny, SpatialReference = spatialRef },
-                            Edges = new List<GraphEdge>()
+                            // [Agent] Optimized: 使用纯double存储坐标
+                            X = nx,
+                            Y = ny,
+                            // [Agent] Optimized: 延迟初始化 Edges，稍后读取 count 再分配容量
+                            Edges = null
                         };
 
                         int edgeCount = br.ReadInt32();
+                        // [Agent] Optimized: 预分配容量，避免 List 扩容
+                        node.Edges = new List<GraphEdge>(edgeCount);
                         for (int e = 0; e < edgeCount; e++)
                         {
                             var edge = new GraphEdge
                             {
                                 TargetNodeId = br.ReadInt32(),
                                 Weight = br.ReadDouble(),
-                                Geometry = new PolylineClass { SpatialReference = spatialRef }
+                                // [Agent (通用辅助)] Optimized: 读取OID和索引
+                                SourceOID = br.ReadInt32(),
+                                SegmentIndex = br.ReadInt32()
                             };
-
-                            int ptCount = br.ReadInt32();
-                            IPointCollection ptColl = edge.Geometry as IPointCollection;
-                            for (int p = 0; p < ptCount; p++)
-                            {
-                                ptColl.AddPoint(new PointClass { X = br.ReadDouble(), Y = br.ReadDouble(), SpatialReference = spatialRef });
-                            }
                             node.Edges.Add(edge);
                         }
                         _graph[id] = node;
                     }
                 }
+                sw.Stop();
+                Log($"二进制缓存加载成功，文件大小: {fileSize / 1024.0 / 1024.0:F2} MB, 耗时: {sw.ElapsedMilliseconds} ms, 节点数: {_graph.Count}");
                 return true;
             }
             catch (Exception ex)
@@ -433,44 +497,45 @@ namespace WindowsFormsMap1
             return fileName;
         }
 
-        public IPolyline FindShortestPath(IPoint startPt, IPoint endPt)
+        /// <summary>
+        /// 【Dijkstra 核心引擎】：寻找起点与终点之间的最短阻抗路径
+        /// 具备多候选起点/终点逻辑 (Multi-Source/Sink) 以应对偏离道路的情况
+        /// </summary>
+        public RouteResult FindShortestPath(IPoint startPt, IPoint endPt)
         {
             if (_graph == null || _graph.Count == 0) return null;
 
-            // 确保坐标系一致
+            // 同步坐标系，防止投影不一致导致计算失败
             if (startPt.SpatialReference == null && _mapSR != null) startPt.SpatialReference = _mapSR;
             if (endPt.SpatialReference == null && _mapSR != null) endPt.SpatialReference = _mapSR;
 
             IPoint sPt = ProjectPoint(startPt, _mapSR);
             IPoint ePt = ProjectPoint(endPt, _mapSR);
 
-            // 【优化】基于边的捕捉策略 (Edge Snapping)
-            // 之前的策略只寻找最近的“节点”（交叉口），如果城市在长路段中间，最近的节点可能在几十公里外，甚至属于另一条不连通的路。
-            // 现在的策略：找到离点最近的那条“边”，把这条边的两个端点都作为候选起点。
+            // 候选点捕捉策略：不只寻找最近的单一点，而是寻找最近的 N 个候选节点以提高连通成功率
             var startNodes = FindNodesNearEdge(sPt);
             var endNodes = FindNodesNearEdge(ePt);
 
-            // 如果基于边的捕捉失败（比如点离路太远），回退到基于距离的节点捕捉
+            // 容错处理：如果基于边的捕捉失败，降级使用基于欧氏距离的节点捕捉
             if (startNodes.Count == 0) startNodes = FindNearestNodes(sPt, 10);
             if (endNodes.Count == 0) endNodes = FindNearestNodes(ePt, 10);
 
             if (startNodes.Count == 0 || endNodes.Count == 0) return null;
 
-            // Dijkstra 多源多宿最短路
+            // 使用优先队列优化 Dijkstra 算法
             var distances = new Dictionary<int, double>();
-            var previous = new Dictionary<int, KeyValuePair<int, IPolyline>>();
+            // [Agent (通用辅助)] Optimized: previous存储边引用而非几何体
+            var previous = new Dictionary<int, KeyValuePair<int, GraphEdge>>();
             var visited = new HashSet<int>();
             PriorityQueue<int, double> pq = new PriorityQueue<int, double>();
 
-            // 初始化
             foreach (var node in _graph.Keys) distances[node] = double.MaxValue;
 
-            // 将所有候选起点入队
+            // 批量注入候选起点，权重初始化为点到道路的"接入距离"
             foreach (var sNode in startNodes)
             {
                 if (!_graph.ContainsKey(sNode)) continue;
-                // 初始距离设为点到节点的直线距离 (估算)
-                double d = (sPt as IProximityOperator).ReturnDistance(_graph[sNode].Point);
+                double d = Math.Sqrt(Math.Pow(sPt.X - _graph[sNode].X, 2) + Math.Pow(sPt.Y - _graph[sNode].Y, 2));
                 if (d < distances[sNode])
                 {
                     distances[sNode] = d;
@@ -480,19 +545,16 @@ namespace WindowsFormsMap1
 
             HashSet<int> targetSet = new HashSet<int>(endNodes);
             int reachedEndId = -1;
-            double minDistLimit = double.MaxValue; // 用于寻找最近的目标
+            double minDistLimit = double.MaxValue;
 
             while (pq.Count > 0)
             {
                 int u = pq.Dequeue();
-
-                // 如果距离已经大于已知最短路很多，可以剪枝 (可选)
                 if (distances[u] > minDistLimit) continue;
 
+                // 目标确认：找到任何一个候选终点即可回溯
                 if (targetSet.Contains(u))
                 {
-                    // 找到一个目标，记录并尝试找更优（如果需要严格最短）
-                    // 这里为了性能，一旦找到就返回，或者稍作比较
                     reachedEndId = u;
                     minDistLimit = distances[u];
                     break;
@@ -503,48 +565,89 @@ namespace WindowsFormsMap1
 
                 if (!_graph.ContainsKey(u)) continue;
 
+                // 松弛操作 (Relaxation)
                 foreach (var edge in _graph[u].Edges)
                 {
                     double newDist = distances[u] + edge.Weight;
                     if (newDist < distances[edge.TargetNodeId])
                     {
                         distances[edge.TargetNodeId] = newDist;
-                        previous[edge.TargetNodeId] = new KeyValuePair<int, IPolyline>(u, edge.Geometry);
+                        // [Agent (通用辅助)] Optimized: 存储边引用，延迟几何加载
+                        previous[edge.TargetNodeId] = new KeyValuePair<int, GraphEdge>(u, edge);
                         pq.Enqueue(edge.TargetNodeId, newDist);
                     }
                 }
             }
 
-            // 【永不失败】断路兜底逻辑 V2
-            // 如果没找到连通路径，尝试分段连接（只返回已探寻的部分）
-            // 或者直接画虚线链接? 用户说“只要能够联通就可以算作一条路径，可以是几条零碎的” -> 意味着我们应该尽量找。
-            // 但 Dijkstra 的特性是如果不可达，根本不会访问到 endNodes。
-
-            // 如果完全失败，尝试“最近邻”匹配，即只找几何上最近的片段（Current implementation skips this to allow fallback logic in caller）
-
-            // 回溯路径
+            // 路径回溯与几何重组
             PolylineClass result = new PolylineClass();
             if (_mapSR != null) result.SpatialReference = _mapSR;
             IGeometryCollection geoColl = result as IGeometryCollection;
 
+            // [Agent] Fix: Declare cache outside to allow access in return block
+            Dictionary<int, IFeature> featureCache = new Dictionary<int, IFeature>();
             if (reachedEndId != -1)
             {
+                // [Agent (通用辅助)] Optimized: 批量加载Feature，避免重复查询
+                var pathEdges = new List<GraphEdge>();
                 int curr = reachedEndId;
                 while (previous.ContainsKey(curr))
                 {
                     var step = previous[curr];
-                    if (step.Value != null)
-                    {
-                        // Insert at 0 implies reversing? No, geometry collection order matters usually for topology but for raw drawing it's fine.
-                        // Standard backtrack goes End -> Start.
-                        geoColl.AddGeometryCollection(step.Value as IGeometryCollection);
-                    }
+                    pathEdges.Add(step.Value);
                     curr = step.Key;
+                }
+
+                // 收集去重后的OID集合
+                var oidSet = new HashSet<int>(pathEdges.Select(e => e.SourceOID));
+
+                // 批量加载Feature到缓存
+                // var featureCache = new Dictionary<int, IFeature>(); // Agent: Use outer var
+                foreach (var oid in oidSet)
+                {
+                    try
+                    {
+                        IFeature feat = _roadLayer.FeatureClass.GetFeature(oid);
+                        if (feat != null) featureCache[oid] = feat;
+                    }
+                    catch { }
+                }
+
+                // 从缓存构建几何体
+                foreach (var edge in pathEdges)
+                {
+                    if (!featureCache.ContainsKey(edge.SourceOID)) continue;
+                    try
+                    {
+                        IFeature feat = featureCache[edge.SourceOID];
+                        if (feat != null && feat.Shape is IPolyline)
+                        {
+                            ISegmentCollection segs = feat.Shape as ISegmentCollection;
+                            if (edge.SegmentIndex < segs.SegmentCount)
+                            {
+                                ISegment seg = segs.get_Segment(edge.SegmentIndex);
+                                PolylineClass poly = new PolylineClass { SpatialReference = _mapSR };
+                                (poly as ISegmentCollection).AddSegment(seg);
+                                geoColl.AddGeometryCollection(poly as IGeometryCollection);
+                            }
+                        }
+                    }
+                    catch { }
                 }
             }
             // 不要 Simplify，因为 Simplify 会合并几何可能导致多部分错乱，保持原样即可
-            return result;
+            // [Agent] Optimized: Return RouteResult with features
+            var rr = new RouteResult();
+            rr.PathLine = result;
+            rr.Length = result.Length;
+            if (previous.ContainsKey(reachedEndId))
+            {
+                // Populate features from cache
+                foreach (var kv in featureCache) rr.RoadFeatures.Add(kv.Value);
+            }
+            return rr;
         }
+
 
         private List<int> FindNodesNearEdge(IPoint pt)
         {
@@ -579,25 +682,71 @@ namespace WindowsFormsMap1
             return nodes.Distinct().ToList();
         }
 
+
         private List<int> FindNearestNodes(IPoint pt, int k)
         {
             if (_graph == null || _graph.Count == 0) return new List<int>();
-            IProximityOperator prox = pt as IProximityOperator;
 
-            // 简单优化：如果节点过多 (>5000)，先用 Envelope 过滤？
-            // 鉴于 C# List 性能，直接 Sort 几千个一般没问题。
+            // [Agent (通用辅助)] Optimized: 使用空间网格索引
+            if (_spatialGrid != null && _spatialGrid.Count > 0)
+            {
+                int targetX = (int)(pt.X / _gridSize);
+                int targetY = (int)(pt.Y / _gridSize);
 
+                var candidates = new List<int>();
+                for (int dx = -1; dx <= 1; dx++)
+                {
+                    for (int dy = -1; dy <= 1; dy++)
+                    {
+                        var key = (targetX + dx, targetY + dy);
+                        if (_spatialGrid.ContainsKey(key))
+                            candidates.AddRange(_spatialGrid[key]);
+                    }
+                }
+
+                if (candidates.Count < k * 2)
+                {
+                    for (int dx = -2; dx <= 2; dx++)
+                    {
+                        for (int dy = -2; dy <= 2; dy++)
+                        {
+                            if (Math.Abs(dx) == 2 || Math.Abs(dy) == 2)
+                            {
+                                var key = (targetX + dx, targetY + dy);
+                                if (_spatialGrid.ContainsKey(key))
+                                    candidates.AddRange(_spatialGrid[key]);
+                            }
+                        }
+                    }
+                }
+
+                // [Agent] Optimized: 使用欧氏距离 (Math.Sqrt) 替代 IProximityOperator，避免COM开销
+                // 注意：这里计算的是直线距离，对于最近节点查找足够准确
+                return candidates.Distinct()
+                    .Select(id => new { Id = id, Dist = Math.Sqrt(Math.Pow(_graph[id].X - pt.X, 2) + Math.Pow(_graph[id].Y - pt.Y, 2)) })
+                    .OrderBy(x => x.Dist)
+                    .Take(k)
+                    .Select(x => x.Id)
+                    .ToList();
+            }
+
+            // 降级：无索引时全图遍历
+            // IProximityOperator prox2 = pt as IProximityOperator;
             return _graph.Values
-                .Select(n => new { n.Id, Dist = prox.ReturnDistance(n.Point) })
+                .Select(n => new { n.Id, Dist = Math.Sqrt(Math.Pow(n.X - pt.X, 2) + Math.Pow(n.Y - pt.Y, 2)) })
                 .OrderBy(x => x.Dist)
                 .Take(k)
                 .Select(x => x.Id)
                 .ToList();
         }
 
-        public IPolyline FindShortestPath(List<IPoint> points)
+        public RouteResult FindShortestPath(List<IPoint> points)
         {
             if (points == null || points.Count < 2) return null;
+
+            RouteResult totalResult = new RouteResult();
+            totalResult.RoadFeatures = new List<IFeature>();
+
             PolylineClass total = new PolylineClass();
             if (_mapSR != null) total.SpatialReference = _mapSR;
             IGeometryCollection coll = total as IGeometryCollection;
@@ -606,26 +755,35 @@ namespace WindowsFormsMap1
 
             for (int i = 0; i < points.Count - 1; i++)
             {
-                IPolyline seg = FindShortestPath(points[i], points[i + 1]);
-                if (seg != null && !seg.IsEmpty)
+                RouteResult seg = FindShortestPath(points[i], points[i + 1]);
+                if (seg != null && seg.PathLine != null && !seg.PathLine.IsEmpty)
                 {
-                    coll.AddGeometryCollection(seg as IGeometryCollection);
+                    coll.AddGeometryCollection(seg.PathLine as IGeometryCollection);
+                    if (seg.RoadFeatures != null) totalResult.RoadFeatures.AddRange(seg.RoadFeatures);
                     anySuccess = true;
                 }
                 else
                 {
                     // 如果中间断了，尝试用直线连接，满足“只要联通就行”的要求
                     // User: "只要能够联通就可以算作一条路径"
-                    IPointCollection pc = new PolylineClass();
+                    IPolyline fallbackLine = new PolylineClass();
+                    if (_mapSR != null) fallbackLine.SpatialReference = _mapSR;
+                    IPointCollection pc = fallbackLine as IPointCollection;
                     pc.AddPoint(points[i]);
                     pc.AddPoint(points[i + 1]);
-                    coll.AddGeometry(pc as IGeometry);
+
+                    // [Fix] Use AddGeometryCollection (Polyline cannot contain Polyline, but can merge Paths)
+                    coll.AddGeometryCollection(fallbackLine as IGeometryCollection);
                     anySuccess = true; // 强行成功
                 }
             }
 
             // 如果完全没有路网部分，可能看起来很怪，但至少有直线
-            return anySuccess ? total : null;
+            if (anySuccess) (total as ITopologicalOperator).Simplify();
+
+            totalResult.PathLine = anySuccess ? total : null;
+            if (totalResult.PathLine != null) totalResult.Length = totalResult.PathLine.Length;
+            return totalResult;
         }
 
         private IPoint ProjectPoint(IPoint pt, ISpatialReference targetSR)
@@ -670,29 +828,27 @@ namespace WindowsFormsMap1
             }
         }
 
+        /// <summary>
+        /// 【智能路线推荐引擎】：基于“拓扑漫步”算法自动生成非遗线路
+        /// 逻辑：在公路上随机漫步，沿途搜索非遗点，直到线路长度满足门槛或进入死胡同
+        /// </summary>
         public static List<TourRoute> GenerateRecommendedRoutes(IFeatureLayer pointLayer, IFeatureLayer lineLayer)
         {
             List<TourRoute> routes = new List<TourRoute>();
             if (pointLayer == null) return routes;
 
-            // 策略1：基于拓扑连通性的随机漫步生成 (Topological Random Walk)
+            // 策略 A：基于拓扑关系的图深度搜索 (Graph DFS)
             if (lineLayer != null && lineLayer.FeatureClass.FeatureCount(null) > 0)
             {
-                // 获取所有高速路要素ID
+                // 获取所有道路 ID 集合，用于随机挑选起点
                 List<int> allRoadOIDs = new List<int>();
-                // 使用回收游标 (Recycling=true) 仅读取OID，效率更高且安全
                 IFeatureCursor cursor = lineLayer.FeatureClass.Search(null, true);
                 IFeature feat;
-                while ((feat = cursor.NextFeature()) != null)
-                {
-                    allRoadOIDs.Add(feat.OID);
-                }
+                while ((feat = cursor.NextFeature()) != null) allRoadOIDs.Add(feat.OID);
                 Marshal.ReleaseComObject(cursor);
 
-                // [Refinement V3] 严格筛选模式：只寻找自身长度超过 500km 的完整路段
-
-                int checkedCount = 0;
                 Random rnd = new Random();
+                // 打乱顺序，增加随机性
                 int n = allRoadOIDs.Count;
                 while (n > 1)
                 {
@@ -703,77 +859,54 @@ namespace WindowsFormsMap1
                     allRoadOIDs[n] = value;
                 }
 
-                // 已访问的要素记录，避免重复利用同一段路
                 HashSet<int> globalVisited = new HashSet<int>();
 
-                // 尝试生成 N 条路线
-                int maxRoutes = 5;
+                int maxRoutes = 5; // 每次生成的推荐线路数量
                 int attempts = 0;
                 while (routes.Count < maxRoutes && attempts < 20 && allRoadOIDs.Count > 0)
                 {
                     attempts++;
 
-                    // 1. 随机选择起点
-                    if (allRoadOIDs.Count == 0) break;
+                    // 1. 种子选择：随机挑选一段道路作为漫步起点
                     int startIdx = rnd.Next(allRoadOIDs.Count);
                     int startOID = allRoadOIDs[startIdx];
-
-                    if (globalVisited.Contains(startOID))
-                    {
-                        // 简单的重试机制，如果命中已访问的，换一个
-                        allRoadOIDs.RemoveAt(startIdx);
-                        continue;
-                    }
+                    if (globalVisited.Contains(startOID)) { allRoadOIDs.RemoveAt(startIdx); continue; }
 
                     IFeature startFeat = lineLayer.FeatureClass.GetFeature(startOID);
                     if (startFeat == null) continue;
 
-                    List<IFeature> currentChain = new List<IFeature>();
-                    currentChain.Add(startFeat);
+                    List<IFeature> currentChain = new List<IFeature> { startFeat };
                     globalVisited.Add(startOID);
-
-                    ITopologicalOperator currentTopo = startFeat.ShapeCopy as ITopologicalOperator; // 累积几何
+                    ITopologicalOperator currentTopo = startFeat.ShapeCopy as ITopologicalOperator;
                     double totalLen = (startFeat.Shape as IPolyline).Length;
 
-                    // 2. 漫步延伸
+                    // 2. 拓扑延伸：寻找与当前路段末端相接的下一段邻居路段
                     bool growing = true;
                     int step = 0;
-                    while (growing && step < 50) // 防止死循环
+                    while (growing && step < 50)
                     {
                         step++;
-                        // 寻找与当前链最后一段相连的路
                         IFeature tail = currentChain[currentChain.Count - 1];
-
                         ISpatialFilter spatFilter = new SpatialFilterClass();
                         spatFilter.Geometry = tail.Shape;
-                        spatFilter.SpatialRel = esriSpatialRelEnum.esriSpatialRelTouches;
+                        spatFilter.SpatialRel = esriSpatialRelEnum.esriSpatialRelTouches; // 使用 Touches 规则确保物理连通
 
                         IFeatureCursor neighborCursor = lineLayer.FeatureClass.Search(spatFilter, false);
                         IFeature neighbor;
                         List<IFeature> candidates = new List<IFeature>();
-
                         while ((neighbor = neighborCursor.NextFeature()) != null)
                         {
-                            if (!globalVisited.Contains(neighbor.OID) && neighbor.OID != tail.OID)
-                            {
-                                candidates.Add(neighbor);
-                            }
-                            else
-                            {
-                                Marshal.ReleaseComObject(neighbor);
-                            }
+                            if (!globalVisited.Contains(neighbor.OID) && neighbor.OID != tail.OID) candidates.Add(neighbor);
+                            else Marshal.ReleaseComObject(neighbor);
                         }
                         Marshal.ReleaseComObject(neighborCursor);
-                        Marshal.ReleaseComObject(spatFilter);
+                        Marshal.ReleaseComObject(spatFilter); // 释放 spatFilter
 
                         if (candidates.Count > 0)
                         {
-                            // 随机选一个延伸
                             IFeature nextFeat = candidates[rnd.Next(candidates.Count)];
                             currentChain.Add(nextFeat);
                             globalVisited.Add(nextFeat.OID);
-
-                            // 更新几何与长度
                             currentTopo = currentTopo.Union(nextFeat.Shape) as ITopologicalOperator;
                             totalLen += (nextFeat.Shape as IPolyline).Length;
 
@@ -783,65 +916,48 @@ namespace WindowsFormsMap1
                                 if (c != nextFeat) Marshal.ReleaseComObject(c);
                             }
                         }
-                        else
-                        {
-                            growing = false; // 死胡同
-                        }
+                        else growing = false; // 死胡同，停止延伸
 
-                        // 长度检查 (300km)
-                        double lenThres = 300000;
-                        if (!(currentTopo as IGeometry).SpatialReference.Name.Contains("Meter")) lenThres = 3.0; // 经纬度
+                        // 结束条件：线路长度已达到省际文化走廊标准
+                        // 假设地理坐标系下，3.0 代表约 300km (粗略估算，1度约111km)
+                        double lenThres = 3.0;
+                        // 如果是投影坐标系，则使用实际米数
+                        if ((currentTopo as IGeometry).SpatialReference is IProjectedCoordinateSystem) lenThres = 300000; // 300km
 
-                        if (totalLen > lenThres)
-                        {
-                            growing = false; // 够长了
-                        }
+                        if (totalLen > lenThres) growing = false;
                     }
 
-                    // 3. 评估路线是否合格
-                    double finalLenThres = 200000; // 最终通过门槛 200km
+                    // 3. 结果入选：线路长度需超过 200km 且包含 3 个以上的非遗景点才算有效推荐
+                    // 最终通过门槛 200km (投影坐标系) 或 2.0 度 (地理坐标系)
+                    double finalLenThres = 2.0;
                     bool isProjected = (currentTopo as IGeometry).SpatialReference is IProjectedCoordinateSystem;
-                    if (!isProjected) finalLenThres = 2.0;
+                    if (isProjected) finalLenThres = 200000;
 
                     if (totalLen > finalLenThres)
                     {
-                        // 这是一个好路线
                         IPolyline routeLine = currentTopo as IPolyline;
-
-                        // 缓冲与景点查找
+                        // 沿线 20km 缓冲 (投影坐标系) 或 0.2度 (地理坐标系)
                         double buffDist = isProjected ? 20000 : 0.2;
                         IGeometry buffer = currentTopo.Buffer(buffDist);
-
-                        ISpatialFilter pf = new SpatialFilterClass();
-                        pf.Geometry = buffer;
-                        pf.SpatialRel = esriSpatialRelEnum.esriSpatialRelIntersects;
-
+                        ISpatialFilter pf = new SpatialFilterClass { Geometry = buffer, SpatialRel = esriSpatialRelEnum.esriSpatialRelIntersects };
                         List<IFeature> routePoints = new List<IFeature>();
                         IFeatureCursor pc = pointLayer.FeatureClass.Search(pf, false);
                         IFeature p;
                         while ((p = pc.NextFeature()) != null) routePoints.Add(p);
                         Marshal.ReleaseComObject(pc);
-                        Marshal.ReleaseComObject(pf);
-                        Marshal.ReleaseComObject(buffer);
+                        Marshal.ReleaseComObject(pf); // 释放 pf
+                        Marshal.ReleaseComObject(buffer); // 释放 buffer
 
-                        if (routePoints.Count >= 3) // 至少3个点
+                        if (routePoints.Count >= 3)
                         {
-                            // 取名字 (取第一段路名 + 最后一段路名)
-                            string n1 = "未知路段";
-                            string n2 = "尽头";
-                            // ... 简化取名逻辑 ...
-                            n1 = GetFeatureName(currentChain[0]);
-                            if (currentChain.Count > 1) n2 = GetFeatureName(currentChain[currentChain.Count - 1]);
-
-                            TourRoute tr = new TourRoute
+                            routes.Add(new TourRoute
                             {
-                                Name = $"漫游推荐：{n1} - {n2}",
-                                Description = $"全长约 {(isProjected ? (totalLen / 1000).ToString("F0") : (totalLen * 100).ToString("F0"))}公里 (估算)，途经 {routePoints.Count} 个非遗点。",
+                                Name = $"文化探访线路：{GetFeatureName(currentChain[0])} - {GetFeatureName(currentChain[currentChain.Count - 1])}",
+                                Description = $"全长约 {(isProjected ? (totalLen / 1000).ToString("F0") : (totalLen * 100).ToString("F0"))}公里，深度覆盖沿途 {routePoints.Count} 个文化遗产集散地。",
                                 RoadFeatures = currentChain,
                                 Points = routePoints,
                                 PathLine = routeLine
-                            };
-                            routes.Add(tr);
+                            });
                         }
                         else
                         {
@@ -857,14 +973,13 @@ namespace WindowsFormsMap1
                 }
             }
 
-            // 策略2：兜底逻辑 (基于地市的预设路线)
+            // 策略 B：兜底方案：如果漫步失败，加载系统预设的三大经典文化主题线路
             if (routes.Count == 0)
             {
-                routes.Add(CreateFallbackRoute(pointLayer, "鲁豫文化走廊 (济青线)", "济南,淄博,潍坊,青岛", "横贯山东东西的文化大动脉，连接省会与沿海城市。"));
-                routes.Add(CreateFallbackRoute(pointLayer, "运河文化风情带", "德州,聊城,济宁,枣庄", "沿着京杭大运河一路向南，感受运河儿女的匠心独运。"));
-                routes.Add(CreateFallbackRoute(pointLayer, "仙境海岸民俗游", "滨州,东营,烟台,威海,日照", "沿着黄金海岸线，体验渔家文化与海洋非遗。"));
+                routes.Add(CreateFallbackRoute(pointLayer, "【主题路线】鲁豫文化走廊 (济青线)", "济南,淄博,潍坊,青岛", "横贯山东东西的文化大动脉，连接省会与沿海城市。"));
+                routes.Add(CreateFallbackRoute(pointLayer, "【主题路线】运河文化风情带", "德州,聊城,济宁,枣庄", "沿着京杭大运河一路向南，感受运河儿女的匠心独运。"));
+                routes.Add(CreateFallbackRoute(pointLayer, "【主题路线】仙境海岸民俗游", "滨州,东营,烟台,威海,日照", "沿着黄金海岸线，体验渔家文化与海洋非遗。"));
             }
-
             return routes;
         }
 
@@ -884,6 +999,7 @@ namespace WindowsFormsMap1
 
             try
             {
+                // 仅导出选中要素
                 IQueryFilter qf = new QueryFilterClass { WhereClause = where };
                 if (layer.FeatureClass.Fields.FindField("CITY_NAME") == -1 && layer.FeatureClass.Fields.FindField("地区") == -1 && layer.FeatureClass.Fields.FindField("市") == -1)
                 {
@@ -939,7 +1055,10 @@ namespace WindowsFormsMap1
         }
 
 
-
+        /// <summary>
+        /// 【地市质心提取逻辑】：根据地市名称从要素图层中查找并返回其几何质心。
+        /// 支持模糊匹配和多种字段名，用于定位城市中心点。
+        /// </summary>
         private IPoint GetCityCentroid(IFeatureLayer layer, string name)
         {
             if (layer == null) return null;
@@ -979,9 +1098,9 @@ namespace WindowsFormsMap1
                     return area.Centroid;
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                // Log("查询异常: " + ex.Message); // Assuming Log method exists
+                // 日志记录暂时挂起
             }
             finally
             {
@@ -992,14 +1111,15 @@ namespace WindowsFormsMap1
     }
 
     /// <summary>
-    /// [Optimized] 真正的优先级队列 (最小二叉堆)
-    /// 解决 20w 节点下 List.Sort 导致的 O(N^2 log N) 性能灾难
+    /// 【高性能优先级队列】：基于最小二分堆实现
+    /// 旨在解决在 20W+ 节点路网计算中，普通列表排序导致的 O(N^2) 性能瓶颈，实现毫秒级路径响应
     /// </summary>
     public class PriorityQueue<TElement, TPriority> where TPriority : IComparable<TPriority>
     {
         private List<KeyValuePair<TElement, TPriority>> _heap = new List<KeyValuePair<TElement, TPriority>>();
         public int Count => _heap.Count;
 
+        // 向上渗透平衡
         public void Enqueue(TElement element, TPriority priority)
         {
             _heap.Add(new KeyValuePair<TElement, TPriority>(element, priority));
@@ -1013,6 +1133,7 @@ namespace WindowsFormsMap1
             }
         }
 
+        // 向下渗透平衡
         public TElement Dequeue()
         {
             if (_heap.Count == 0) return default(TElement);

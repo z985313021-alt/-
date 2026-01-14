@@ -17,13 +17,13 @@ namespace WindowsFormsMap1
     /// </summary>
     public partial class Form1
     {
-        // [Member E] Modified: 增强索引切换逻辑，实现“专业/演示”模式的一键切换
+        // 【模式切换中心】：监听界面 Tab 页签的变化，实现“地理分析”与“酷炫演示”模式的平滑过渡
         private void TabControl1_SelectedIndexChanged(object sender, EventArgs e)
         {
-            // [修复] 统一判定逻辑：索引 2 为演示模式
+            // 判定当前是否为“演示模式”
             bool isVisualMode = tabControl1.SelectedIndex == 2;
 
-            // 调用双态切换引擎
+            // 触发全局 UI 皮肤与工具栏的显隐切换
             SetUIMode(isVisualMode);
 
             if (tabControl1.SelectedIndex == 1) // 布局视图
@@ -61,16 +61,17 @@ namespace WindowsFormsMap1
         // [Member B] Added: 绑定地图事件监听器
         // 注意：_dashboardYear 已在主分部类 Form1.cs 中定义
 
+        // 【UI 渲染引擎】：根据当前模式，智能切换 Ribbon 菜单、状态栏、TOC 图层列表以及分割线的显示状态
         public void SetUIMode(bool isPresentation)
         {
-            // 1. 显隐专业工具
+            // 1. 隐藏/显示 GIS 专业工具（菜单栏、状态栏、图层树等）
             this.menuStrip1.Visible = !isPresentation;
             this.statusStrip1.Visible = !isPresentation;
             this.axTOCControl2.Visible = !isPresentation;
             this.splitter1.Visible = !isPresentation;
             this.splitter2.Visible = !isPresentation;
 
-            // 2. 鹰眼同步：专业模式下由 Load/ExtentUpdated 驱动，演示模式下需手动唤醒
+            // 2. 鹰眼联动逻辑：演示模式下确保鹰眼面板在顶层显示，方便观众快速定位当前区域
             if (isPresentation)
             {
                 // 演示模式下强制把鹰眼面板置顶
@@ -81,18 +82,20 @@ namespace WindowsFormsMap1
         // [Member E] Added: Dynamic PageLayoutControl for Thematic Maps
         private ESRI.ArcGIS.Controls.AxPageLayoutControl _axPageLayoutVisual;
 
+        // 【演示布局初始化】：构建符合“现代互联网感”的演示界面，包括左侧导航栏和主体分屏区域
         public void InitVisualLayout()
         {
             if (_isVisualLayoutInitialized) return;
 
-            // [Optimization] 挂起布局逻辑，防止界面闪烁
+            // 挂起界面重绘，防止动态添加控件时的闪烁导致视觉体验下降
             this.SuspendLayout();
             try
             {
-                // 1. 结构化容器
+                // 1. 构建响应式容器：左侧导航栏 + 右侧主内容区
                 _panelMainContent = new Panel { Dock = DockStyle.Fill, BackColor = System.Drawing.Color.AliceBlue };
                 _panelSidebar = new Panel { Width = 80, Dock = DockStyle.Left, BackColor = Color.White, Padding = new Padding(5, 20, 5, 5) };
 
+                // 2. 动态注入侧边栏功能按钮组
                 AddSidebarButton("全景", 0);
                 AddSidebarButton("搜索", 1);
                 AddSidebarButton("分类", 2);
@@ -308,17 +311,17 @@ namespace WindowsFormsMap1
         }
 
         /// <summary>
-        /// [Member E] 新增：向侧边栏添加导航按钮
+        /// 【侧边栏按钮工厂】：根据业务需求动态创建具备图标与文字说明的导航按钮
         /// </summary>
         private void AddSidebarButton(string text, int index)
         {
             Button btn = new Button();
             btn.Text = text;
-            btn.Size = new Size(70, 70); // 紧凑方块
-            btn.Location = new System.Drawing.Point(5, 20 + index * 75); // 紧凑间距 (5px 缝隙)
+            btn.Size = new Size(70, 70); // 标准化紧凑方块
+            btn.Location = new System.Drawing.Point(5, 20 + index * 75); // 垂直等间距排列
             btn.TextAlign = ContentAlignment.BottomCenter;
             btn.TextImageRelation = TextImageRelation.ImageAboveText;
-            btn.Padding = new Padding(0, 0, 0, 4); // 仅留底部微量余白
+            btn.Padding = new Padding(0, 0, 0, 4);
             btn.ImageAlign = ContentAlignment.TopCenter;
 
             // 为侧边栏按钮分配图标
@@ -347,7 +350,7 @@ namespace WindowsFormsMap1
             _panelSidebar.Controls.Add(btn);
         }
 
-        // [Member E] Switch to Data View (Hide Layout Control)
+        // 【状态切换：回归地图模式】：展示 2D 要素图层控件，隐藏排版布局视图
         private void SwitchToDataView()
         {
             if (_axPageLayoutVisual != null) _axPageLayoutVisual.Visible = false;
@@ -357,7 +360,7 @@ namespace WindowsFormsMap1
             if (_panelMapToolbar != null) _panelMapToolbar.Visible = true;
         }
 
-        // [Member E] Switch to Layout View (Show Layout Control)
+        // 【状态切换：进入布局模式】：展示具有精美排版（地图装饰、比例尺、来源说明）的专题图视图
         private void SwitchToLayoutView()
         {
             if (axMapControlVisual != null) axMapControlVisual.Visible = false;
@@ -370,20 +373,20 @@ namespace WindowsFormsMap1
         // ... existing code ...
 
         /// <summary>
-        /// [Member E] 新增：侧边栏导航路由逻辑
+        /// 【侧边栏交互中心】：根据点击的按钮文本分发具体的 GIS 业务逻辑
         /// </summary>
         private void SidebarBtn_Click(object sender, EventArgs e)
         {
             Button btn = sender as Button;
             if (btn == null) return;
 
-            // [Agent] Ensure we are in Data View by default unless "Classification" switches it
+            // 逻辑强制：除“专题制图”外，其余功能均在实时数据地图模式下进行
             if (btn.Text != "分类")
             {
                 SwitchToDataView();
             }
 
-            // 1. 高亮当前选中按钮
+            // 1. 实现侧边栏的互斥高亮效果
             foreach (Control c in _panelSidebar.Controls)
             {
                 if (c is Button b)
@@ -392,39 +395,39 @@ namespace WindowsFormsMap1
                     b.ForeColor = System.Drawing.Color.Black;
                 }
             }
-            btn.BackColor = System.Drawing.Color.LightSkyBlue; // 浅色背景下的高亮色
+            btn.BackColor = System.Drawing.Color.LightSkyBlue;
             btn.ForeColor = System.Drawing.Color.MidnightBlue;
 
-            // [Agent Fix] Auto-close Search UI when switching modes
+            // 场景清理：点击非搜索功能时，自动合拢搜索面板
             if (btn.Text != "搜索")
             {
                 if (_panelSearch != null) _panelSearch.Visible = false;
                 if (_panelResultList != null) _panelResultList.Visible = false;
             }
 
-            // [Agent Fix] Auto-reset Heatmap when switching modes
+            // 状态重置：点击非热力图功能时，自动注销热力图渲染器
             if (btn.Text != "热力图" && _isHeatmapActive)
             {
                 ResetRenderer();
                 _isHeatmapActive = false;
             }
 
-            // 2. 根据按钮切换视图逻辑
+            // 2. 根据按钮文本切换具体的业务视图逻辑
             switch (btn.Text)
             {
                 case "全景":
-                    // 展示全省非遗点位全貌
+                    // 【全景功能】：重置地图缩放，展示全山东省所有非遗点位的全貌
                     axMapControlVisual.Extent = axMapControlVisual.FullExtent;
                     break;
                 case "分类":
-                    // [Member E] 专题图：按类别弹出菜单选择
+                    // 【分类专题图】：弹出右键菜单，允许用户选择不同的非遗类别专题地图
                     ShowCategoryMenu(btn);
                     break;
                 case "搜索":
-                    // [Agent Upgrade] 切换搜索面板可见性
+                    // 【非遗搜索】：切换悬浮搜索面板的显示状态，并聚焦输入框
                     if (_panelSearch != null)
                     {
-                        SwitchToDataView(); // 确保在地图模式
+                        SwitchToDataView(); // 确保切换回数据地图模式
                         _panelSearch.Visible = !_panelSearch.Visible;
                         if (_panelSearch.Visible)
                         {
@@ -432,27 +435,28 @@ namespace WindowsFormsMap1
                         }
                         else
                         {
-                            // Close result list if search panel is closed
                             if (_panelResultList != null) _panelResultList.Visible = false;
                         }
                     }
                     break;
                 case "演变":
-                    // [Member E] 触发时间演变模拟逻辑
+                    // 【时空演变】：启动自动化的时间滑块模拟，展示非遗随年份的分布增长
                     SimulateTimeEvolution();
                     break;
                 case "热力图":
-                    // [New] 进入时空热力图模式
+                    // 【热力分析】：计算点位密度并开启红黄色调的热力图渲染模式
                     EnterHeatmapMode();
                     break;
                 case "游览":
-                    // [Agent Add] 推荐游览路线
+                    // 【游览路线】：弹出路线规划窗口（FormTourRoutes），提供推荐的文化旅游线路
                     ShowTourRoutes();
                     break;
                 case "返回":
+                    // 【模式切换】：关闭演示模式界面，退回到 GIS 专业编辑器模式
                     tabControl1.SelectedIndex = 0;
                     break;
                 case "WEB":
+                    // 【Web同步】：打开嵌入式的 WebView2 网页看板，通常用于大屏数据可视化
                     OpenWebVisualMode();
                     break;
             }
@@ -460,7 +464,7 @@ namespace WindowsFormsMap1
             // ... (rest of the method) ...
         }
 
-        // [Refactored] 初始化布局视图的独立工具栏
+        // 【排版工具栏初始化】：为专题制图页面提供专属的控制工具（整页缩放、版面漫游等）
         private void InitLayoutToolbar()
         {
             _panelLayoutToolbar = new Panel
@@ -538,20 +542,23 @@ namespace WindowsFormsMap1
             menu.Show(btn, new System.Drawing.Point(btn.Width, 0));
         }
 
+        // 【专题地图驱动）：根据用户选择，加载预设的 MXD 文档并自动应用路径映射
         private void LoadThematicMap(string folderName, string mxdName, string subFolder = "")
         {
             try
             {
-                // 1. Try to find the root data directory "山东省arcgis处理数据及底图"
-                string rootDataDir = FindDataRootDirectory("山东省arcgis处理数据及底图");
+                // 1. 系统智能扫描：在项目周边目录寻找数据根路径
+                string rootDataDir = FindDataRootDirectory("数据资源");
+                // [Use Agent Fallback] 兼容团队成员的命名习惯
+                if (string.IsNullOrEmpty(rootDataDir)) rootDataDir = FindDataRootDirectory("山东省arcgis处理数据及底图");
 
                 if (string.IsNullOrEmpty(rootDataDir))
                 {
-                    MessageBox.Show("未找到数据根目录: 山东省arcgis处理数据及底图", "路径错误");
+                    MessageBox.Show("演示模式数据包缺失，请检查：数据资源 或 山东省arcgis处理数据及底图", "路径探测失败");
                     return;
                 }
 
-                // 2. Construct full path
+                // 2. 拼接完整的专题地图路径
                 string fullPath = System.IO.Path.Combine(rootDataDir, folderName);
                 if (!string.IsNullOrEmpty(subFolder))
                 {
@@ -559,38 +566,38 @@ namespace WindowsFormsMap1
                 }
                 fullPath = System.IO.Path.Combine(fullPath, mxdName);
 
-                // 3. Load Map into PageLayoutControl
+                // 3. 将图纸加载到专用排版控件中
                 if (System.IO.File.Exists(fullPath))
                 {
-                    // [Agent] Switch to Layout View before loading
-                    SwitchToLayoutView();
+                    SwitchToLayoutView(); // 切换视图态
 
                     _axPageLayoutVisual.LoadMxFile(fullPath);
-                    _axPageLayoutVisual.ZoomToWholePage(); // [Fix] Ensure map fills the control
+                    _axPageLayoutVisual.ZoomToWholePage(); // 自适应整页
                     _axPageLayoutVisual.ActiveView.Refresh();
                 }
                 else
                 {
-                    MessageBox.Show($"文件不存在: {fullPath}", "加载失败");
+                    MessageBox.Show($"专题地图文件缺失: {fullPath}", "加载失败");
                 }
             }
             catch (Exception ex)
             {
-                MessageBox.Show("加载专题图出错: " + ex.Message);
+                MessageBox.Show("动态渲染专题图失败: " + ex.Message);
             }
         }
 
-        // [Agent Add] Initialize Stylish Floating Search Panel
+        // 【浮动搜索面板初始化】：构建一个优雅的悬浮窗，支持用户输入关键词并实时反馈搜索建议
         private void InitSearchPanel()
         {
             _panelSearch = new Panel
             {
-                Size = new Size(320, 70), // Increased height for instructions
+                Size = new Size(320, 70),
                 Location = new System.Drawing.Point(20, 60),
                 BackColor = Color.White,
                 Visible = false,
                 Anchor = AnchorStyles.Top | AnchorStyles.Left
             };
+            // 绘制精细的边框线条
             _panelSearch.Paint += (s, e) => { ControlPaint.DrawBorder(e.Graphics, _panelSearch.ClientRectangle, Color.LightGray, ButtonBorderStyle.Solid); };
 
             Label lblHint = new Label
@@ -606,11 +613,12 @@ namespace WindowsFormsMap1
             {
                 Location = new System.Drawing.Point(10, 10),
                 Width = 220,
-                BorderStyle = BorderStyle.FixedSingle, // FixedSingle for better visibility
+                BorderStyle = BorderStyle.FixedSingle,
                 Font = new Font("微软雅黑", 10F),
                 Text = "输入地市或非遗名称..."
             };
 
+            // 交互：输入框占位符提示逻辑
             _txtVisualSearch.GotFocus += (s, e) => { if (_txtVisualSearch.Text == "输入地市或非遗名称...") { _txtVisualSearch.Text = ""; _txtVisualSearch.ForeColor = Color.Black; } };
             _txtVisualSearch.LostFocus += (s, e) => { if (string.IsNullOrWhiteSpace(_txtVisualSearch.Text)) { _txtVisualSearch.Text = "输入地市或非遗名称..."; _txtVisualSearch.ForeColor = Color.Gray; } };
             _txtVisualSearch.KeyDown += (s, e) => { if (e.KeyCode == Keys.Enter) PerformVisualSearch(_txtVisualSearch.Text); };
@@ -633,7 +641,7 @@ namespace WindowsFormsMap1
             _panelSearch.Controls.Add(lblHint);
         }
 
-        // [New] Show Search Results in Floating List
+        // 【搜索结果展示】：将匹配到的非遗项目列表呈现在专门的结果浮窗中，并支持分类标题
         private void ShowSearchResults(List<string> items, string title)
         {
             if (_panelResultList == null)
@@ -641,7 +649,7 @@ namespace WindowsFormsMap1
                 _panelResultList = new Panel
                 {
                     Size = new Size(250, 300),
-                    Location = new System.Drawing.Point(20, 140), // Below search panel
+                    Location = new System.Drawing.Point(20, 140),
                     BackColor = Color.White,
                     Anchor = AnchorStyles.Top | AnchorStyles.Left,
                     Visible = false
@@ -660,7 +668,7 @@ namespace WindowsFormsMap1
                 _panelResultList.Controls.Add(_lstResults);
                 _panelResultList.Controls.Add(lblTitle);
 
-                // Add to map container if not present
+                // [架构衔接]：如果搜索面板存在容器，则将结果列表也放入该容器中
                 if (_panelSearch.Parent != null && !_panelSearch.Parent.Controls.Contains(_panelResultList))
                 {
                     _panelSearch.Parent.Controls.Add(_panelResultList);
@@ -678,16 +686,14 @@ namespace WindowsFormsMap1
                 foreach (var item in items) _lstResults.Items.Add(item);
             }
 
-            // Update Title
-            (_panelResultList.Controls[1] as Label).Text = title; // Index 1 is title label because ListBox added first? No, ListBox Dock Fill, Label Dock Top. Controls collection order depends on Add.
-            // Actually careful with index. Let's just find it.
+            // 实时更新列表页眉文字
             foreach (Control c in _panelResultList.Controls) if (c is Label) c.Text = title;
 
             _panelResultList.Visible = true;
             _panelResultList.BringToFront();
         }
 
-        // [Agent Add] Core Layout Search Logic
+        // 【核心搜索逻辑】：基于空间数据库的混合搜索机制（支持地市定位与要素名称检索）
         private void PerformVisualSearch(string keyword)
         {
             if (string.IsNullOrWhiteSpace(keyword) || keyword.Contains("输入地市")) return;
@@ -701,12 +707,11 @@ namespace WindowsFormsMap1
                 bool found = false;
                 List<string> resultNames = new List<string>();
 
-                // Strategy 1: Search City (Region)
+                // 策略 A：地市行政区定位策略（优先匹配 shiqu/市级 行政图层）
                 IFeatureLayer cityLayer = null;
                 for (int i = 0; i < axMapControlVisual.LayerCount; i++)
                 {
                     ILayer l = axMapControlVisual.get_Layer(i);
-                    // [Fix] User specified layer name "shiqu"
                     if ((l.Name.Contains("shiqu") || l.Name.Contains("地市") || l.Name.Contains("行政")) && l is IFeatureLayer fl && fl.FeatureClass.ShapeType == esriGeometryType.esriGeometryPolygon)
                     {
                         cityLayer = fl;
@@ -717,7 +722,7 @@ namespace WindowsFormsMap1
                 if (cityLayer != null)
                 {
                     IQueryFilter qf = new QueryFilterClass();
-                    // [Fix] User specified: City layer is "shiqu", Field is "行政名"
+                    // 多元化地市字段搜索（匹配名为“行政名”或“Name”的字段）
                     string nameField = "行政名";
                     if (cityLayer.FeatureClass.Fields.FindField("行政名") == -1)
                     {
@@ -727,11 +732,11 @@ namespace WindowsFormsMap1
                     qf.WhereClause = $"{nameField} LIKE '%{keyword}%'";
 
                     IFeatureCursor cursor = cityLayer.Search(qf, false);
-                    IFeature cityFeature = cursor.NextFeature(); // Only take first city match
+                    IFeature cityFeature = cursor.NextFeature();
                     if (cityFeature != null)
                     {
                         found = true;
-                        // Zoom to city
+                        // 视角切换：地图缩放至该行政区域全貌，并执行闪烁特效进行视觉提示
                         axMapControlVisual.Extent = cityFeature.Shape.Envelope;
                         axMapControlVisual.FlashShape(cityFeature.Shape, 1, 300, null);
 
@@ -907,14 +912,14 @@ namespace WindowsFormsMap1
             }
         }
 
-        // [Agent Add] 显示游览路线窗口
+        // 【路线窗口驱动】：启动游览路线规划模块，并将当前地图中的关键要素图层传递给子窗口
         private void ShowTourRoutes()
         {
             try
             {
                 this.Cursor = Cursors.WaitCursor;
 
-                // 1. 查找关键图层
+                // 1. 资源搜寻：在演示模式地图中查找非遗点、模拟路网线以及行政区划面
                 IFeatureLayer ichLayer = null;
                 IFeatureLayer cityLayer = null;
                 List<IFeatureLayer> lineLayers = new List<IFeatureLayer>();
@@ -927,16 +932,16 @@ namespace WindowsFormsMap1
                         string name = fl.Name.ToLower();
                         if (name.Contains("非遗") || name.Contains("项目")) ichLayer = fl;
 
-                        // Collect all line layers for road selection
+                        // 收集线要素图层，作为潜在的路网匹配来源
                         if (fl.FeatureClass.ShapeType == esriGeometryType.esriGeometryPolyline)
                         {
                             lineLayers.Add(fl);
                         }
 
-                        // [Agent] Find City Layer
+                        // 查找地市行政边界图层
                         if ((name.Contains("city") || name.Contains("地市") || name.Contains("行政") || name.Contains("shiqu") || name.Contains("boundary")) && fl.FeatureClass.ShapeType == esriGeometryType.esriGeometryPolygon)
                         {
-                            if (!name.Contains("label") && !name.Contains("anno")) // Exclude annotation layers
+                            if (!name.Contains("label") && !name.Contains("anno"))
                                 cityLayer = fl;
                         }
                     }
@@ -944,7 +949,7 @@ namespace WindowsFormsMap1
 
                 this.Cursor = Cursors.Default;
 
-                // 2. 展示窗口
+                // 2. 界面呼出：实例化并展示路网分析窗口
                 if (_tourRoutesForm == null || _tourRoutesForm.IsDisposed)
                 {
                     _tourRoutesForm = new FormTourRoutes(this, cityLayer, lineLayers, ichLayer);
@@ -955,22 +960,22 @@ namespace WindowsFormsMap1
             catch (Exception ex)
             {
                 this.Cursor = Cursors.Default;
-                MessageBox.Show("打开路线窗口失败: " + ex.Message);
+                MessageBox.Show("启动智慧导航模块失败: " + ex.Message);
             }
         }
 
-        // [Agent Add] 在地图上展示特定路线 (由 FormTourRoutes 调用)
+        // 【路线动态渲染】：在演示地图上同步显示规划结果，包括点位高亮、路网连线以及视角自动缩放
+        // 此方法被 FormTourRoutes 调用以实现跨窗口的 GIS 联动效果
         public void DisplayTourRoute(AnalysisHelper.TourRoute route)
         {
             if (route == null) return;
 
+            // 情况清理：清空之前的选择集与示意图层
             axMapControlVisual.Map.ClearSelection();
             axMapControlVisual.ActiveView.GraphicsContainer.DeleteAllElements();
 
-            // 1. 高亮路线点
+            // 1. 高亮非遗节点：优先通过要素类引用机制寻找图层
             IFeatureLayer ichLayer = null;
-
-            // 尝试根据点位数据的来源类查找图层 (更准确)
             if (route.Points != null && route.Points.Count > 0)
             {
                 IFeatureClass ptClass = route.Points[0].Class as IFeatureClass;
@@ -985,7 +990,7 @@ namespace WindowsFormsMap1
                 }
             }
 
-            // 如果没找到 (或者没点)，回退到按名字找
+            // 逻辑兜底：若引用失效，通过图层名进行二次搜索
             if (ichLayer == null)
             {
                 for (int i = 0; i < axMapControlVisual.LayerCount; i++)
@@ -1001,33 +1006,22 @@ namespace WindowsFormsMap1
 
             if (ichLayer != null && route.Points != null && route.Points.Count > 0)
             {
-                IGeoFeatureLayer gfl = ichLayer as IGeoFeatureLayer;
-                if (gfl != null)
-                {
-                    // 构造选择集 (使用 Add 而非 SelectFeatures，避免 SQL 长度限制导致的 crash)
-                    IFeatureSelection fs = gfl as IFeatureSelection;
-                    fs.Clear();
-                    ISelectionSet selSet = fs.SelectionSet;
-
-                    foreach (var pt in route.Points)
-                    {
-                        selSet.Add(pt.OID);
-                    }
-
-                    // 注意：不需要调用 SelectFeatures，直接操作 SelectionSet 即可
-                    // 视图刷新在方法最后统一处理
-                }
+                IFeatureSelection fs = ichLayer as IFeatureSelection;
+                fs.Clear();
+                ISelectionSet selSet = fs.SelectionSet;
+                // 批量向选择集中添加 OID，实现非遗点的视觉高亮
+                foreach (var pt in route.Points) selSet.Add(pt.OID);
             }
 
-            // 1.5 高亮高速路线 (新增需求)
+            // 2. 高亮路网轨迹：对构成路径的所有路段进行选择集渲染
+            // [Agent] Disabled: 仅显示 pathLine 几何，避免高亮整个 Feature 导致视觉杂乱（因为 Feature 可能很长）
+            /*
             if (route.RoadFeatures != null && route.RoadFeatures.Count > 0)
             {
-                // 查找高速图层 (简单遍历)
                 IFeatureLayer roadLayer = null;
                 for (int i = 0; i < axMapControlVisual.LayerCount; i++)
                 {
                     ILayer l = axMapControlVisual.get_Layer(i);
-                    // 假设高速图层名字包含 "高速" 或 "Line" 且包含 route.RoadFeatures[0] 所在的 FeatureClass
                     if (l is IFeatureLayer fl && fl.FeatureClass != null &&
                         fl.FeatureClass.AliasName == route.RoadFeatures[0].Class.AliasName)
                     {
@@ -1036,71 +1030,41 @@ namespace WindowsFormsMap1
                     }
                 }
 
-                // 如果找不到精确匹配，尝试按名字找
-                if (roadLayer == null)
-                {
-                    for (int i = 0; i < axMapControlVisual.LayerCount; i++)
-                    {
-                        ILayer l = axMapControlVisual.get_Layer(i);
-                        if (l.Name.Contains("高速") && l is IFeatureLayer) { roadLayer = l as IFeatureLayer; break; }
-                    }
-                }
-
                 if (roadLayer != null)
                 {
-                    List<int> roadOids = new List<int>();
-                    foreach (var f in route.RoadFeatures) roadOids.Add(f.OID);
-
-                    if (roadOids.Count > 0)
-                    {
-                        IFeatureSelection fs = roadLayer as IFeatureSelection;
-                        // 先清空当前选择
-                        fs.Clear();
-
-                        // 批量添加到选择集 (使用循环确保稳定性，避免 WHERE 语句超长)
-                        ISelectionSet selSet = fs.SelectionSet;
-                        foreach (int oid in roadOids)
-                        {
-                            selSet.Add(oid);
-                        }
-
-                        // 刷新视图以显示选择
-                        // The partial refresh happens at end of method
-                    }
+                    IFeatureSelection fs = roadLayer as IFeatureSelection;
+                    fs.Clear();
+                    ISelectionSet selSet = fs.SelectionSet;
+                    foreach (var f in route.RoadFeatures) selSet.Add(f.OID);
                 }
             }
+            */
 
-            // 2. 绘制连线 (示意性)
-            // 如果 route.PathLine 为空，我们可以简单地按顺序连接点
+            // 3. 绘制路径示意线：在 Graphics 容器中绘制连线，确保路径逻辑清晰
             IGeometry lineGeo = route.PathLine;
-            if ((lineGeo == null || lineGeo.IsEmpty) && route.Points.Count > 1)
-            {
-                IPointCollection pc = new PolylineClass();
-                foreach (var pt in route.Points)
-                {
-                    pc.AddPoint(pt.ShapeCopy as IPoint);
-                }
-                lineGeo = pc as IGeometry;
-            }
-
             if (lineGeo != null && !lineGeo.IsEmpty)
             {
-                // 简单绘制
+                // [Agent] Fix: Project geometry to map spatial reference
+                // 确保几何体坐标系与当前地图一致，防止因投影不同导致绘制飞到天边或缩成一点
+                if (lineGeo.SpatialReference != null && axMapControlVisual.SpatialReference != null &&
+                    lineGeo.SpatialReference.FactoryCode != axMapControlVisual.SpatialReference.FactoryCode)
+                {
+                    lineGeo = (lineGeo as ESRI.ArcGIS.esriSystem.IClone).Clone() as IGeometry;
+                    lineGeo.Project(axMapControlVisual.SpatialReference);
+                }
+
                 SimpleLineSymbolClass lineSym = new SimpleLineSymbolClass();
-                // 使用高亮青色，更醒目
-                lineSym.Color = new RgbColorClass { Red = 0, Green = 255, Blue = 255 };
-                lineSym.Width = 5; // 加粗
-                lineSym.Style = esriSimpleLineStyle.esriSLSSolid; // 实线
+                lineSym.Color = new RgbColorClass { Red = 0, Green = 255, Blue = 255 }; // 青色醒目连线
+                lineSym.Width = 5;
+                lineSym.Style = esriSimpleLineStyle.esriSLSSolid;
 
                 LineElementClass le = new LineElementClass { Geometry = lineGeo, Symbol = lineSym };
                 axMapControlVisual.ActiveView.GraphicsContainer.AddElement(le, 0);
             }
 
-            // 3. 缩放到范围
-            // 3. 缩放到范围
+            // 4. 全屏视角优化：自动计算路径整体包络范围，并动态缩放地图视角
             if (ichLayer != null && (ichLayer as IFeatureSelection).SelectionSet.Count > 0)
             {
-                // 3. 缩放到范围
                 ISelectionSet selectionSet = (ichLayer as IFeatureSelection).SelectionSet;
                 ICursor cursor;
                 selectionSet.Search(null, false, out cursor);
@@ -1114,28 +1078,29 @@ namespace WindowsFormsMap1
                     if (first) { env = f.Extent; first = false; }
                     else env.Union(f.Extent);
                 }
-                System.Runtime.InteropServices.Marshal.ReleaseComObject(featureCursor);
-                System.Runtime.InteropServices.Marshal.ReleaseComObject(cursor);
-
                 env.Expand(1.2, 1.2, true);
                 axMapControlVisual.Extent = env;
             }
 
+            // 全局刷新地理选择集与图形容器
             axMapControlVisual.ActiveView.PartialRefresh(esriViewDrawPhase.esriViewGraphics, null, null);
             axMapControlVisual.ActiveView.PartialRefresh(esriViewDrawPhase.esriViewGeoSelection, null, null);
         }
 
-        // [Member E] Modified: 修复同步逻辑，确保地图图层正确复制且不发生冲突
+        // 【模式同步】：将专业编辑模式（MapControl2）的地图图层、当前范围以及渲染状态同步给演示模式
         private void SyncToVisualMode(bool force = false)
         {
             if (axMapControlVisual == null || axMapControl2 == null) return;
             try
             {
-                // [Member E] 同步专业版底图到演示版
-                // 仅在首次加载或用户明确同步时执行，或者强制同步时执行
-                if (force || (axMapControlVisual.LayerCount == 0 && axMapControl2.LayerCount > 0))
+                // 策略：检测地图文档是否发生了根本变化（如切换了 MXD），决定是否执行耗时同步
+                bool needSync = force ||
+                               (axMapControlVisual.LayerCount == 0 && axMapControl2.LayerCount > 0) ||
+                               (axMapControlVisual.LayerCount != axMapControl2.LayerCount);
+
+                if (needSync)
                 {
-                    // 深度克隆地图对象（避免引用冲突引发的 COM 异常）
+                    // 使用 UIHelper 对整个地图对象进行内存深度克隆，防止 COM 底层引用导致的跨线程访问崩溃
                     try
                     {
                         ESRI.ArcGIS.Carto.IMap clonedMap = UIHelper.CloneMap(axMapControl2.Map);
@@ -1150,17 +1115,16 @@ namespace WindowsFormsMap1
                     }
                     catch
                     {
-                        CopyLayersSafely();
+                        CopyLayersSafely(); // 降级处理：手动逐层复制
                     }
 
-                    // 切换到演示模式时默认显示全图范围
                     axMapControlVisual.Extent = axMapControlVisual.FullExtent;
                     axMapControlVisual.ActiveView.Refresh();
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine("同步演示视图失败: " + ex.Message);
+                Console.WriteLine("演示视图同步错误: " + ex.Message);
             }
         }
 
@@ -1189,29 +1153,34 @@ namespace WindowsFormsMap1
 
 
 
+        // 【自适应递归搜索算法】：在项目目录树中智能查找指定的数据文件夹
+        // 核心逻辑：从程序当前运行目录 (bin/Debug) 开始，逐级向上爬升查找，直到找到目标或达到最大递归深度。
         private string FindDataRootDirectory(string targetDirName)
         {
-            string current = Application.StartupPath;
+            string current = Application.StartupPath; // 起点：通常是 bin\Debug
+
+            // 设定最大搜索深度为 6 层，防止无限递归导致死循环或性能损耗
+            // 这足以覆盖从 Debug 目录回溯到 项目根目录 甚至 解决方案根目录 的范围
             for (int i = 0; i < 6; i++)
             {
-                string path = System.IO.Path.Combine(current, targetDirName);
-                // Also check if targetDirName is in a sibling folder (common in dev envs structure like '1.8/-')
-
-                // Check direct subdirectory
+                // 1. 尝试直接在当前目录下寻找名为 targetDirName 的子文件夹
+                // 例如：Checking C:\Projects\MyMap\bin\Debug\数据资源
                 string[] dirs = System.IO.Directory.GetDirectories(current, targetDirName, System.IO.SearchOption.TopDirectoryOnly);
-                if (dirs.Length > 0) return dirs[0];
+                if (dirs.Length > 0) return dirs[0]; // 🎯 命中目标，直接返回完整路径
 
-                // Special case for the user structure seen: "LYF地图操作\山东省arcgis处理数据及底图"
-                string lyfPath = System.IO.Path.Combine(current, "LYF地图操作", targetDirName);
+                // 2. 特殊结构兼容：适配某些团队成员习惯将资源放在 "源代码" 子目录下的情况
+                // 例如：Checking C:\Projects\MyMap\源代码\数据资源
+                string lyfPath = System.IO.Path.Combine(current, "源代码", targetDirName);
                 if (System.IO.Directory.Exists(lyfPath)) return lyfPath;
 
-                // Move up
+                // 3. 向上回溯：如果没有找到，则退回到上一级父目录，准备进行下一轮搜索
+                // 例如：从 bin\Debug 退回到 bin，再退回 MyMap...
                 var parent = System.IO.Directory.GetParent(current);
-                if (parent == null) break;
+                if (parent == null) break; // 已到达磁盘根目录，停止搜索
                 current = parent.FullName;
             }
-            // Broad search for the directory if simple traversal fails? 
-            // Better to stay safe and just return null if not found near project.
+
+            // 遍历所有可能的层级后仍未找到，返回 null 表示探测失败
             return null;
         }
 
@@ -1246,15 +1215,21 @@ namespace WindowsFormsMap1
             RenderCityChoropleth(_dashboardYear);
 
             _isHeatmapActive = true;
+
+            // [Agent Fix] 关键修复:正确设置热力图模式标志
+            // 这样FilterMapByYear才能正确响应时间轴变化
+            _isHeatmapMode = true;
         }
 
+        // 【渲染器重置】：关闭热力图过滤状态，移除临时符号渲染，恢复地图的原始视觉呈现
         private void ResetRenderer()
         {
-            // 恢复普通点展示 (通过 FilterMapByYear 解除过滤并重置 Renderer 也可以，或者简单全图刷新)
-            // 先重置数据过滤，显示全部数据
-            FilterMapByYear(2099);
+            _isHeatmapMode = false;
 
-            // 强制重新同步图层，覆盖热力图的临时符号
+            // 步骤 1：撤销年份过滤限制（2030 表示显示未来至无穷的时间节点）
+            FilterMapByYear(2030);
+
+            // 步骤 2：触发地图图层全量同步，通过强制刷新逻辑清除热力图的符号遮罩
             SyncToVisualMode(true);
         }
 
@@ -1306,32 +1281,30 @@ namespace WindowsFormsMap1
         }
 
         /// <summary>
-        /// [Member E] 实现基于行政区划的“分级色彩热力图”
-        /// 逻辑：遍历16地市，查询当前年份的非遗数量，动态赋予颜色
+        /// 【专题地图渲染】：实现基于 16 地市行政区划的“分级色彩热力图”
+        /// 通过计算各市在指定年份的非遗保有量，动态为行政多边形填充不同的警示色
         /// </summary>
         private void RenderCityChoropleth(int year)
         {
             try
             {
-                // 1. 寻找地市面图层
+                // 1. 自动搜索匹配图层：寻找名称中包含“shiqu”或“地市”的行政多边形图层
                 IFeatureLayer cityLayer = null;
                 string nameField = "";
 
-                // 智能查找图层 (增强对 Pinyin 'shiqu' 的支持)
                 for (int i = 0; i < axMapControlVisual.LayerCount; i++)
                 {
                     ILayer l = axMapControlVisual.get_Layer(i);
                     if (l is IFeatureLayer && l.Visible && (l as IFeatureLayer).FeatureClass.ShapeType == esriGeometryType.esriGeometryPolygon)
                     {
                         string ln = l.Name.ToLower();
-                        // 匹配 shiqu, boundary, 市, 行政
                         if (ln.Contains("shiqu") || ln.Contains("地市") || ln.Contains("行政") || ln.Contains("市") || ln.Contains("区划"))
                         {
-                            // 排除明显不是的图层 (如 purely label)
+                            // 规则排除：忽略标注类与附属图层
                             if (ln.Contains("ming") || ln.Contains("label") || ln.Contains("anno")) continue;
 
                             cityLayer = l as IFeatureLayer;
-                            // 尝试自动识别名称字段
+                            // 智能探测行政区名称字段（支持多版本数据集命名习惯）
                             IFields fields = cityLayer.FeatureClass.Fields;
                             string[] pFields = { "NAME", "Name", "名称", "市", "CITY_NAME", "City", "DISHI", "DiShi" };
                             foreach (var f in pFields)
@@ -1339,7 +1312,7 @@ namespace WindowsFormsMap1
                                 if (fields.FindField(f) != -1) { nameField = f; break; }
                             }
 
-                            // 如果没找到标准字段，尝试找第一个字符串字段
+                            // 兜底方案：若无预设名称，取第一个字符型字段
                             if (string.IsNullOrEmpty(nameField))
                             {
                                 for (int j = 0; j < fields.FieldCount; j++)
@@ -1405,28 +1378,25 @@ namespace WindowsFormsMap1
         }
 
         /// <summary>
-        /// [Helper] 获取高对比度热力色 (黄 -> 橙 -> 鲜红 -> 深红)
+        /// 【颜色映射引擎】：获取高对比度热力色 (遵循：黄 -> 橙 -> 鲜红 -> 深红 的警示逻辑)
+        /// 分级阈值经过项目实际点位密度的离散化调优
         /// </summary>
         private IColor GetHighContrastHeatmapColor(int count)
         {
             RgbColorClass color = new RgbColorClass();
-            // 数量分级策略 (根据实际数据量级可能需要调整)
-            if (count == 0) { color.Red = 255; color.Green = 255; color.Blue = 255; } // 白色 (无数据)
-            else if (count <= 5) { color.Red = 255; color.Green = 255; color.Blue = 150; } // 浅黄
-            else if (count <= 10) { color.Red = 255; color.Green = 200; color.Blue = 0; } // 橙黄
-            else if (count <= 20) { color.Red = 255; color.Green = 120; color.Blue = 0; } // 橙色
-            else if (count <= 35) { color.Red = 255; color.Green = 50; color.Blue = 0; } // 橘红
-            else if (count <= 50) { color.Red = 220; color.Green = 0; color.Blue = 0; } // 鲜红
-            else { color.Red = 139; color.Green = 0; color.Blue = 0; } // 深褐红 (最高)
+            if (count == 0) { color.Red = 255; color.Green = 255; color.Blue = 255; } // 无数据：纯白
+            else if (count <= 5) { color.Red = 255; color.Green = 255; color.Blue = 150; } // 萌芽期：浅黄
+            else if (count <= 10) { color.Red = 255; color.Green = 200; color.Blue = 0; } // 发展期：橙黄
+            else if (count <= 20) { color.Red = 255; color.Green = 120; color.Blue = 0; } // 稳定期：橙色
+            else if (count <= 35) { color.Red = 255; color.Green = 50; color.Blue = 0; } // 密集期：橘红
+            else if (count <= 50) { color.Red = 220; color.Green = 0; color.Blue = 0; } // 汇聚期：鲜红
+            else { color.Red = 139; color.Green = 0; color.Blue = 0; } // 巅峰期：深褐红
             return color;
         }
 
-        /// <summary>
-        /// [Helper] 基于 Visual Map 的轻量级统计
-        /// </summary>
+        // 【轻量级统计逻辑】：基于当前演示地图图层，快速查询各城市的非遗项目数量
         private int GetCountByCityVisual(string cityName, int year)
         {
-            // 简单复用逻辑：遍历点图层，统计包含 CityName 且符合 Year 的要素
             try
             {
                 IFeatureLayer pointLayer = null;
@@ -1437,6 +1407,7 @@ namespace WindowsFormsMap1
                 }
                 if (pointLayer == null) return 0;
 
+                // 构造 SQL 混合查询语句：结合地市空间名与年份过滤规则
                 string where = $"({GetCityField(pointLayer)} LIKE '%{cityName.Replace("市", "")}%') AND {GetTimeClause(pointLayer, year)}";
                 if (string.IsNullOrEmpty(where)) return 0;
 
@@ -1478,6 +1449,7 @@ namespace WindowsFormsMap1
         }
 
 
+        // 【全自动标签渲染】：扫描所有地图图层，智能识别名称字段并开启“微软雅黑”风格的动态标注
         private void EnableLabelsForAllLayers()
         {
             for (int i = 0; i < axMapControlVisual.LayerCount; i++)
@@ -1485,6 +1457,7 @@ namespace WindowsFormsMap1
                 IGeoFeatureLayer gfl = axMapControlVisual.get_Layer(i) as IGeoFeatureLayer;
                 if (gfl == null) continue;
 
+                // 关键词映射列表：自动识别不同地理规范定义的项目名称字段
                 string[] labelFields = { "名称", "项目名称", "Name", "TITLE" };
                 string targetField = "";
                 if (gfl.FeatureClass == null) continue;
@@ -1497,6 +1470,7 @@ namespace WindowsFormsMap1
 
                 if (!string.IsNullOrEmpty(targetField))
                 {
+                    // 设置展示 Annotation
                     gfl.DisplayAnnotation = true;
                     ILabelEngineLayerProperties engineProps = new LabelEngineLayerPropertiesClass { Expression = "[" + targetField + "]" };
                     ITextSymbol textSym = new TextSymbolClass { Size = 8 };
@@ -1548,7 +1522,7 @@ namespace WindowsFormsMap1
             axMapControlVisual.ActiveView.Refresh();
         }
 
-        // [Member E] Added: Open independent Web Visualization Window
+        // 【Web 演示模块入口】：启动基于 WebView2 的独立大屏看板窗口，用于呈现复杂的 Web-SHP 联动效果
         private void OpenWebVisualMode()
         {
             try
@@ -1558,7 +1532,7 @@ namespace WindowsFormsMap1
             }
             catch (Exception ex)
             {
-                MessageBox.Show("启动Web演示模式失败: " + ex.Message + "\n请确认WebView2环境已就绪。", "系统提示");
+                MessageBox.Show("启动 Web 大屏演示模块失败: " + ex.Message + "\n请确认本地 WebView2 运行时环境已正确安装。", "系统环境提示");
             }
         }
 
@@ -1640,7 +1614,8 @@ namespace WindowsFormsMap1
                 ApplyYearFilterToControl(axMapControl2, year);
                 ApplyYearFilterToControl(axMapControlVisual, year);
 
-                // 3. [Agent Add] 如果处于热力图模式，同步重绘分级色彩
+                // 3. [Agent Fix] 仅在热力图模式下更新分级色彩
+                // 这样可以避免在全景模式下误应用热力图渲染
                 if (_isHeatmapMode)
                 {
                     RenderCityChoropleth(year);

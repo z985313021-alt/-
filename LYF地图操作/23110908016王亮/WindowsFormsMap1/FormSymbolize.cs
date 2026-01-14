@@ -12,6 +12,10 @@ using ESRI.ArcGIS.Geometry;
 
 namespace WindowsFormsMap1
 {
+    /// <summary>
+    /// 【专题图编辑器窗体】：提供图层符号化配置界面
+    /// 支持简单符号化、唯一值渲染（类别图）及分级色彩渲染（数量指标图）
+    /// </summary>
     public partial class FormSymbolize : Form
     {
         private AxMapControl _mapControl;
@@ -28,12 +32,12 @@ namespace WindowsFormsMap1
 
         private void FormSymbolize_Load(object sender, EventArgs e)
         {
-            // 初始化 SymbologyControl
+            // 【环境准备】：初始化 SymbologyControl 并加载标准样式库
             string installPath = ESRI.ArcGIS.RuntimeManager.ActiveRuntime.Path;
-            // 加载 ESRI.ServerStyle (包含大多图标)
+            // 加载 ESRI.ServerStyle，这是 ArcGIS 内置的最全符号定义文件
             axSymbologyControl1.LoadStyleFile(installPath + @"Styles\ESRI.ServerStyle");
 
-            // 加载图层
+            // 【图层枚举】：遍历主地图控件，提取所有矢量图层（要素图层）
             if (_mapControl != null)
             {
                 for (int i = 0; i < _mapControl.LayerCount; i++)
@@ -70,6 +74,7 @@ namespace WindowsFormsMap1
             return null;
         }
 
+        // 【字段透视】：提取当前图层的属性表结构，并按数据类型自动分类
         private void UpdateFields()
         {
             cmbUniqueField.Items.Clear();
@@ -79,13 +84,14 @@ namespace WindowsFormsMap1
             for (int i = 0; i < fields.FieldCount; i++)
             {
                 IField field = fields.get_Field(i);
+                // 排除系统内建字段（如 OID、几何对象列），这些通常不用于符号化
                 if (field.Type == esriFieldType.esriFieldTypeOID || field.Type == esriFieldType.esriFieldTypeGeometry)
                     continue;
 
-                // 所有非几何字段都可以用于唯一值
+                // [唯一值渲染]：所有字段类型（文本、数值等）均可用于类别统计
                 cmbUniqueField.Items.Add(field.Name);
 
-                // 仅数值字段用于分级色彩
+                // [分级色彩渲染]：仅限数值类型字段（整型、浮点型等），用于衡量指标大小
                 if (field.Type == esriFieldType.esriFieldTypeInteger ||
                     field.Type == esriFieldType.esriFieldTypeSmallInteger ||
                     field.Type == esriFieldType.esriFieldTypeDouble ||
@@ -169,24 +175,25 @@ namespace WindowsFormsMap1
 
         #region 唯一值渲染 (Tab 2)
 
+        // 【全量属性枚举】：使用统计引擎获取字段中所有不重复的值
         private void btnUniqueAddAll_Click(object sender, EventArgs e)
         {
             if (cmbUniqueField.SelectedItem == null) return;
             string fieldName = cmbUniqueField.SelectedItem.ToString();
 
-            // 获取唯一值逻辑
             try
             {
                 lvUnique.Items.Clear();
                 int fieldIndex = _currentLayer.FeatureClass.Fields.FindField(fieldName);
                 if (fieldIndex == -1) return;
 
-                // 使用 DataStatistics 获取唯一值集合
+                // [ArcObjects 统计机制]：使用 DataStatistics 无需手动遍历游标，性能更高
                 ICursor cursor = _currentLayer.Search(null, false) as ICursor;
                 IDataStatistics dataStats = new DataStatisticsClass();
                 dataStats.Cursor = cursor;
                 dataStats.Field = fieldName;
 
+                // 获取唯一值迭代器
                 System.Collections.IEnumerator uniqueValues = dataStats.UniqueValues;
                 uniqueValues.Reset();
 
@@ -197,15 +204,16 @@ namespace WindowsFormsMap1
                     object val = uniqueValues.Current;
                     if (val == null) continue;
 
-                    ListViewItem item = new ListViewItem(val.ToString()); // 存储值
-                    item.SubItems.Add(val.ToString()); // 存储标签内容
+                    ListViewItem item = new ListViewItem(val.ToString()); // 显示值
+                    item.SubItems.Add(val.ToString());                    // 显示标签
 
-                    // 为该值生成随机颜色符号
+                    // [自动染色方案]：根据几何类型生成带随机颜色的符号
                     ISymbol symbol = CreateSimpleSymbol(_currentLayer.FeatureClass.ShapeType, GetRandomColor(rnd));
-                    item.Tag = symbol; // 存储符号到 Tag 供后续渲染使用
+                    item.Tag = symbol; // 暂存符号对象到 Tag 中
 
                     lvUnique.Items.Add(item);
                 }
+                // COM 资源释放必不可少，防止数据库死锁
                 System.Runtime.InteropServices.Marshal.ReleaseComObject(cursor);
             }
             catch (Exception ex)
@@ -232,7 +240,7 @@ namespace WindowsFormsMap1
 
         #region 分级渲染 (Tab 3)
 
-        // 简单实现：等间距分级算法
+        // 【等间距分级算法】：实现数据指标与色带的线性映射
         private void CalculateClassBreaks()
         {
             if (cmbClassField.SelectedItem == null) return;
@@ -243,6 +251,7 @@ namespace WindowsFormsMap1
             {
                 lvClassBreaks.Items.Clear();
 
+                // 1. 调用统计引擎获取极值数据 (Min/Max)
                 ICursor cursor = _currentLayer.Search(null, false) as ICursor;
                 IDataStatistics dataStats = new DataStatisticsClass();
                 dataStats.Cursor = cursor;
@@ -251,27 +260,28 @@ namespace WindowsFormsMap1
                 IStatisticsResults results = dataStats.Statistics;
                 double min = results.Minimum;
                 double max = results.Maximum;
-                double interval = (max - min) / classCount;
+                double interval = (max - min) / classCount; // 核心：计算每级的数值间隔
 
                 System.Runtime.InteropServices.Marshal.ReleaseComObject(cursor);
 
-                // 生成色带 (简单起见，从浅红到深红)
+                // 2. 动态色带生成 (基于算法色调梯度)
                 IEnumColors colors = CreateColorRamp(classCount);
                 colors.Reset();
 
+                // 3. 构建分级区间
                 for (int i = 0; i < classCount; i++)
                 {
                     double breakStart = min + i * interval;
                     double breakEnd = min + (i + 1) * interval;
-                    // 修正最后一个值，避免精度丢失
+                    // 精度校正：确保最后一级包含最大值
                     if (i == classCount - 1) breakEnd = max;
 
                     ListViewItem item = new ListViewItem($"{breakStart:F2} - {breakEnd:F2}");
-                    item.SubItems.Add($"Class {i + 1}");
+                    item.SubItems.Add($"分级 {i + 1}");
 
                     IColor color = colors.Next();
                     ISymbol symbol = CreateSimpleSymbol(_currentLayer.FeatureClass.ShapeType, color);
-                    item.Tag = symbol; // 存储符号
+                    item.Tag = symbol; 
 
                     lvClassBreaks.Items.Add(item);
                 }

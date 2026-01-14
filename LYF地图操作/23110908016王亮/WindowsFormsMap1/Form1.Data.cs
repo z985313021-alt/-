@@ -11,34 +11,35 @@ namespace WindowsFormsMap1
 {
     public partial class Form1
     {
-        // 成员 D：数据中台 (Data Fabric)
-
+        // 【数据中台模块】：负责为图表可视化系统（ECharts）提供底层 GIS 空间数据的查询与统计接口
         public void InitDataModule()
         {
-            // [Member D] 数据导入功能已移除 (任务完成)
+            // [Member D] 此处可进行数据库初始化等操作
         }
 
         /// <summary>
-        /// [Member D] 增强型图层定位助手：支持双控制器搜索、解耦可见性并扩展关键词
+        /// 【图层自动定位系统】：通过多级搜索机制，在当前地图中自动寻找并锁定“非遗”相关的核心图层
+        /// 逻辑：优先检查活动地图，再检查后台控件，支持根据内置关键词库进行模糊匹配
         /// </summary>
         private IFeatureLayer FindHeritageLayer()
         {
-            // 优先级 1：检查专业版地图 (axMapControl2)
+            // 第一级：搜索 GIS 专业模式下的活动地图 (axMapControl2)
             IFeatureLayer layer = SearchLayerInControl(axMapControl2);
             if (layer != null) return layer;
 
-            // 优先级 2：检查演示版地图 (axMapControlVisual)
+            // 第二级：搜索可视化演示模式下的地图 (axMapControlVisual)
             layer = SearchLayerInControl(axMapControlVisual);
             if (layer != null) return layer;
 
             return null;
         }
 
+        // 【图层特征扫描】：在指定的地图控件中遍历所有图层，识别包含地理实体的要素类图层
         private IFeatureLayer SearchLayerInControl(ESRI.ArcGIS.Controls.AxMapControl mapControl)
         {
             if (mapControl == null || mapControl.LayerCount == 0) return null;
 
-            // 关键词库：按匹配度降序
+            // 关键词库：用于识别非遗点位图层的标识符
             string[] keys = { "非遗", "名录", "项目", "ICH", "SD", "山东", "点", "数据" };
 
             for (int i = 0; i < mapControl.LayerCount; i++)
@@ -58,7 +59,8 @@ namespace WindowsFormsMap1
         }
 
         /// <summary>
-        /// [Member D] 内部辅助：将年份过滤逻辑应用到指定的地图控件
+        /// 【动态时间过滤】：根据时间轴滑块选定的年份，动态更新地图上展示的非遗点位
+        /// 逻辑：自动识别图层中的“公布时间”或“批次”字段，构建 SQL 定义查询子句
         /// </summary>
         private void ApplyYearFilterToControl(ESRI.ArcGIS.Controls.AxMapControl mapControl, int year)
         {
@@ -66,6 +68,7 @@ namespace WindowsFormsMap1
 
             try
             {
+                // 1. 获取核心非遗图层
                 IFeatureLayer heritageLayer = null;
                 for (int i = 0; i < mapControl.LayerCount; i++)
                 {
@@ -84,10 +87,10 @@ namespace WindowsFormsMap1
                 if (heritageLayer != null)
                 {
                     IFields fields = heritageLayer.FeatureClass.Fields;
-                    string timeField = "";
-                    string batchField = "";
+                    string timeField = "";   // 存储捕获到的时间字段名
+                    string batchField = "";  // 存储捕获到的批次字段名
 
-                    // [Agent Modified] 动态查找字段，提升兼容性
+                    // 2. 智能匹配数据库字段（解决不同版本数据字段名不统一的问题）
                     for (int j = 0; j < fields.FieldCount; j++)
                     {
                         string fn = fields.get_Field(j).Name;
@@ -98,11 +101,13 @@ namespace WindowsFormsMap1
                     if (!string.IsNullOrEmpty(timeField) || !string.IsNullOrEmpty(batchField))
                     {
                         List<string> conditions = new List<string>();
+                        // 过滤规则 1：按具体年份过滤
                         if (!string.IsNullOrEmpty(timeField))
                         {
                             conditions.Add($"({timeField} >= 1900 AND {timeField} <= {year})");
                         }
 
+                        // 过滤规则 2：按国家级批次对应年份过滤
                         if (!string.IsNullOrEmpty(batchField))
                         {
                             int maxBatch = 0;
@@ -114,11 +119,12 @@ namespace WindowsFormsMap1
                             conditions.Add($"({batchField} >= 1 AND {batchField} <= {maxBatch} AND {batchField} < 20)");
                         }
 
+                        // 执行 SQL 过滤（设置 DefinitionExpression）
                         string sqlFilter = string.Join(" OR ", conditions);
                         IFeatureLayerDefinition layerDef = heritageLayer as IFeatureLayerDefinition;
                         if (layerDef != null) layerDef.DefinitionExpression = sqlFilter;
 
-                        // [Optimization] 仅当控件可见时才刷新，避免后台无意义的渲染消耗
+                        // 局部刷新地理图层
                         if (mapControl.Visible && mapControl.Parent != null && mapControl.Parent.Visible)
                         {
                             mapControl.ActiveView.PartialRefresh(esriViewDrawPhase.esriViewGeography, null, null);
@@ -130,10 +136,9 @@ namespace WindowsFormsMap1
         }
 
         /// <summary>
-        /// [API] 获取指定城市的非遗项目数量 (基于真实数据字段查询)
+        /// 【核心接口】：根据地市名称和当前年份获取非遗项目数量
+        /// 逻辑：自动匹配字段名（地市/行政区等），并根据时间滑块位置进行过滤
         /// </summary>
-        /// <param name="cityName">城市名称</param>
-        /// <param name="year">当前滑块年份</param>
         public int GetCountByCity(string cityName, int year)
         {
             try
@@ -144,7 +149,7 @@ namespace WindowsFormsMap1
 
                 IFields fields = targetLayer.FeatureClass.Fields;
 
-                // 2. 匹配地市字段 (权重排序：确信度高的排前面)
+                // 2. 地市字段权重匹配（按确信度从高到低排列关键词）
                 string realCityField = "";
                 string[] cityKeys = { "地市", "所属地区", "行政区", "县市区", "DS", "CITY", "QX", "COUNTY", "市", "NAME", "Name" };
                 for (int i = 0; i < fields.FieldCount; i++)
@@ -155,14 +160,12 @@ namespace WindowsFormsMap1
                         if (fName.Contains(k.ToUpper()))
                         {
                             realCityField = fields.get_Field(i).Name;
-                            // 如果找到了包含“地市”或“所属地区”的字段，优先确认
+                            // 优先锁定含有“地市”或“地区”的字段，因为它最符合业务定义
                             if (fName.Contains("地市") || fName.Contains("地区")) break;
                         }
                     }
                     if (!string.IsNullOrEmpty(realCityField) && (realCityField.Contains("地市") || realCityField.Contains("地区"))) break;
                 }
-
-                // 兜底：如果没找到地市字段，但有 NAME 且不是地市确信度高的，则保留最后一次匹配
 
                 // 3. 匹配时间字段 (包含“公布时间”和“公布批次”)
                 string realTimeField = "";
@@ -226,10 +229,9 @@ namespace WindowsFormsMap1
         }
 
         /// <summary>
-        /// [API] 获取指定年份的非遗项目类别统计
+        /// 【核心接口】：获取当前年份下的非遗项目类别比例（供饼图展示）
+        /// 逻辑：遍历所有要素，按“类别”字段进行分组计数
         /// </summary>
-        /// <param name="year">当前滑块年份</param>
-        /// <returns>Key:类别名称, Value:数量</returns>
         public Dictionary<string, int> GetCategoryStats(int year)
         {
             Dictionary<string, int> stats = new Dictionary<string, int>();

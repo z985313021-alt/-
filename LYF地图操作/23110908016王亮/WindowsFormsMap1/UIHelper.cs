@@ -8,8 +8,8 @@ using ESRI.ArcGIS.esriSystem;
 namespace WindowsFormsMap1
 {
     /// <summary>
-    /// UI 辅助类
-    /// 仅保留通用 UI 逻辑，如导出功能
+    /// 【UI 交互中枢】：提供通用的地图导出与对象克隆服务
+    /// 解耦业务逻辑与底层样式，确保界面的视觉一致性
     /// </summary>
     public class UIHelper
     {
@@ -30,7 +30,8 @@ namespace WindowsFormsMap1
         }
 
         /// <summary>
-        /// [重构] 导出地图为图片
+        /// 【地图快照导出】：将当前活动视图渲染为高质量图像文件
+        /// 支持 JPEG、BMP、PNG 格式，自动处理分辨率适配
         /// </summary>
         public static void ExportMap(AxMapControl mapControl)
         {
@@ -46,22 +47,26 @@ namespace WindowsFormsMap1
                 if (dlg.ShowDialog() == DialogResult.OK)
                 {
                     ESRI.ArcGIS.Carto.IActiveView activeView = mapControl.ActiveView;
+                    // 指令分发：根据后缀名实例化对应的导出引擎
                     ESRI.ArcGIS.Output.IExport export = dlg.FileName.EndsWith(".jpg") ? new ESRI.ArcGIS.Output.ExportJPEGClass() :
                                                        dlg.FileName.EndsWith(".bmp") ? (ESRI.ArcGIS.Output.IExport)new ESRI.ArcGIS.Output.ExportBMPClass() :
                                                        new ESRI.ArcGIS.Output.ExportPNGClass();
 
                     export.ExportFileName = dlg.FileName;
-                    export.Resolution = 96;
+                    export.Resolution = 96; // 标准分辨率
                     ESRI.ArcGIS.esriSystem.tagRECT frame = activeView.ExportFrame;
+                    
+                    // 获取绘图句柄并进行视图渲染
                     int hdc = export.StartExporting();
                     activeView.Output(hdc, (int)export.Resolution, ref frame, null, null);
+                    
                     export.FinishExporting();
                     export.Cleanup();
 
-                    MessageBox.Show("导出成功！路径：" + dlg.FileName);
+                    MessageBox.Show("地图快照导出成功！\n文件存放在：" + dlg.FileName);
                 }
             }
-            catch (Exception ex) { MessageBox.Show("导出失败：" + ex.Message); }
+            catch (Exception ex) { MessageBox.Show("导出过程发生系统异常：" + ex.Message); }
         }
 
         /// <summary>
@@ -81,7 +86,8 @@ namespace WindowsFormsMap1
     }
 
     /// <summary>
-    /// [Agent Add] 全局样式引擎 (蓝白现代风格)
+    /// 【现代统一样式引擎】：基于现代简约主义调色盘，动态注入 UI 皮肤
+    /// 包含 procedural 矢量图标绘制逻辑，替代传统的资源图片存储，减小程序体积并提高清晰度
     /// </summary>
     public static class ThemeEngine
     {
@@ -168,7 +174,8 @@ namespace WindowsFormsMap1
         }
 
         /// <summary>
-        /// [Agent Add] 获取增强型图标集 (提升辨识度)
+        /// 【Procedural 矢量图标生成器】：使用 GDI+ 算法动态绘制现代扁平化图标
+        /// 优点：支持无限缩放不模糊，支持动态配色，无需依赖外部图片资源
         /// </summary>
         public static Image GetIcon(string type, Color? color = null)
         {

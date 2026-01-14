@@ -11,9 +11,13 @@ using System.Runtime.InteropServices; // Added for Marshal.ReleaseComObject
 
 namespace WindowsFormsMap1
 {
+    /// <summary>
+    /// 【Web 演示模式窗体】：利用 WebView2 容器承载由 HTML5/JS 驱动的高级可视化效果
+    /// 实现了 C# WinForms 与现代 Web 技术栈的深度融合
+    /// </summary>
     public partial class FormWebVisual : Form
     {
-        private WebView2 webView;
+        private WebView2 webView; // 核心浏览器内核容器指针
 
         public FormWebVisual()
         {
@@ -21,6 +25,7 @@ namespace WindowsFormsMap1
             // Initialization moved to Form_Load
         }
 
+        // 【动态容器配置】：初始化 WebView2 实例并绑定导航监听
         private void InitializeComponent()
         {
             this.webView = new Microsoft.Web.WebView2.WinForms.WebView2();
@@ -46,11 +51,11 @@ namespace WindowsFormsMap1
             this.ClientSize = new System.Drawing.Size(800, 450);
             this.Controls.Add(this.webView);
             this.Name = "FormWebVisual";
-            this.Text = "Web Visualization Mode";
+            this.Text = "游客演示模式 - 现代 Web 可视化体验";
             this.WindowState = System.Windows.Forms.FormWindowState.Maximized;
             this.Load += new System.EventHandler(this.FormWebVisual_Load);
 
-            // [Agent] Inject data when page finishes loading
+            // [业务逻辑绑定]：在页面导航完成后自动执行数据注入
             this.webView.NavigationCompleted += WebView_NavigationCompleted;
 
             ((System.ComponentModel.ISupportInitialize)(this.webView)).EndInit();
@@ -65,58 +70,57 @@ namespace WindowsFormsMap1
             }
         }
 
+        // 【环境预热】：异步初始化 WebView2 运行时并注册 C# 通信协议桥
         private async void FormWebVisual_Load(object sender, EventArgs e)
         {
             try
             {
+                // 等待内核就绪
                 await webView.EnsureCoreWebView2Async(null);
 
-                // [Agent] Register the bridge for SQL interaction
-                // JS can access via: window.chrome.webview.hostObjects.bridge
+                // [异构系统桥接]：将 C# 的 WebBridge 对象暴露给 JavaScript
+                // JS 端可以通过 `window.chrome.webview.hostObjects.bridge` 进行无缝调用
                 webView.CoreWebView2.AddHostObjectToScript("bridge", new WebBridge());
 
-                // [Agent] Navigate AFTER bridge is registered to avoid race conditions
+                // [资源定位]：自适应搜索 HTML 资产路径 (适配开发环境与发布环境)
                 string htmlPath = FindHtmlAsset("index.html");
 
                 if (File.Exists(htmlPath))
                 {
-                    webView.Source = new Uri(htmlPath);
+                    webView.Source = new Uri(htmlPath); // 激活导航
                 }
                 else
                 {
-                    MessageBox.Show($"VisualWeb assets not found at: {htmlPath}", "Assets Missing", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    MessageBox.Show($"可视化前端资源丢失，请检查路径：{htmlPath}", "部署异常", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 }
             }
             catch (Exception ex)
             {
-                MessageBox.Show("WebView2 Runtime initialization failed: " + ex.Message + "\nMake sure WebView2 Runtime is installed.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show("WebView2 内核启动失败，请确保宿主环境已安装 WebView2 Runtime。\n错误明细：" + ex.Message);
             }
         }
 
         // [Agent] Core Logic: Independent Data Injection (SQL Version)
+        // 【全量数据压入】：将后台 SQL 数据库内容以 JSON 流形式推送到前端 ECharts 中
         private void InjectData()
         {
             if (webView.CoreWebView2 == null) return;
 
             try
             {
-                // First inject map data
+                // 首先注入静态地理底图配置 (GeoJSON)
                 InjectMapData();
 
-                // First inject map data
-                InjectMapData();
-
-                // Then inject ICH data
+                // 调用数据分析引擎获取非遗明细 (JSON)
                 WebBridge bridge = new WebBridge();
                 string json = bridge.GetAllData();
 
-                // Send to JS
+                // [推模式下发]：通过 WebMessage 通信机制将数据推送到前端总线
                 webView.CoreWebView2.PostWebMessageAsJson(json);
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine("Injection Error: " + ex.Message);
-                MessageBox.Show("数据注入错误: " + ex.Message, "Error");
+                System.Diagnostics.Debug.WriteLine("数据总线故障: " + ex.Message);
             }
         }
 

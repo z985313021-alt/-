@@ -15,11 +15,11 @@ namespace WindowsFormsMap1
     public class DataHelper
     {
         /// <summary>
-        /// 数据瘦身：从全国数据中提取山东省数据并保存到 GDB
+        /// 【数据瘦身】：利用空间过滤技术，从全国的海量非遗数据中筛选出山东省的项目，并转存为高性能的 File GDB 格式
         /// </summary>
-        /// <param name="sourceShpPath">原始 Shapefile 完整路径</param>
-        /// <param name="targetGdbDir">目标 GDB 所在目录</param>
-        /// <param name="targetGdbName">目标 GDB 名称 (如 ShandongICH.gdb)</param>
+        /// <param name="sourceShpPath">原始全国 Shapefile 的完整路径</param>
+        /// <param name="targetGdbDir">目标地理数据库所在的文件夹</param>
+        /// <param name="targetGdbName">生成的 GDB 名称（建议以 .gdb 结尾）</param>
         public static string SlimDataToGDB(string sourceShpPath, string targetGdbDir, string targetGdbName)
         {
             try
@@ -32,14 +32,14 @@ namespace WindowsFormsMap1
                 IFeatureClass sourceFeatureClass = OpenShapefile(sourceShpPath);
                 if (sourceFeatureClass == null) return "无法打开原始 Shapefile";
 
-                // 3. 构建过滤条件 (提取山东省)
+                // 3. 构建 SQL 过滤条件（仅提取省份字段为“山东省”的记录）
                 IQueryFilter queryFilter = new QueryFilterClass();
                 queryFilter.WhereClause = "省 = '山东省'";
 
-                // 4. 定位目标要素类名称
+                // 4. 定义目标要素类的名称（原名加 _SD 后缀）
                 string className = System.IO.Path.GetFileNameWithoutExtension(sourceShpPath) + "_SD";
 
-                // 如果已存在，则删除 (简单重置逻辑)
+                // 安全清理：如果目标数据库中已存在同名要素类，先将其删除以避免冲突
                 if ((targetWorkspace as IWorkspace2).get_NameExists(esriDatasetType.esriDTFeatureClass, className))
                 {
                     IDataset dataset = (targetWorkspace as IFeatureWorkspace).OpenFeatureClass(className) as IDataset;
@@ -87,10 +87,10 @@ namespace WindowsFormsMap1
 
         private static void ExportFilteredFeatures(IFeatureClass sourceFC, IFeatureWorkspace targetFW, string newName, IQueryFilter filter)
         {
-            // 创建目标要素类 (结构同源)
+            // 1. 创建目标要素类的字段集（结构基本继承自源数据）
             IFields targetFields = CloneFields(sourceFC.Fields);
 
-            // [新增] 检查并增加“类别”字段
+            // 2. 字段增强：如果原始数据缺失“类别”字段，则手动补全，方便后续的专题图渲染
             if (sourceFC.FindField("类别") == -1)
             {
                 IFieldsEdit fieldsEdit = (IFieldsEdit)targetFields;
@@ -151,10 +151,11 @@ namespace WindowsFormsMap1
         }
 
         /// <summary>
-        /// 离散化处理：将重叠在同一点的要素稍微散开，呈环状分布
+        /// 【点位离散化】：解决地图上多个非遗点地理坐标完全重合的问题
+        /// 逻辑：将位于同一个坐标点上的要素，按圆形环状均匀展开，防止视觉上的点位遮挡
         /// </summary>
-        /// <param name="featureClass">要处理的要素类</param>
-        /// <param name="offsetDistanceDegree">偏移距离(经纬度单位,0.0005约为50米)</param>
+        /// <param name="featureClass">待处理的点要素类</param>
+        /// <param name="offsetDistanceDegree">偏移距离（经纬度单位，0.0008 约为 80 米）</param>
         public static string DisplaceDuplicatePoints(IFeatureClass featureClass, double offsetDistanceDegree = 0.0008)
         {
             try
@@ -186,16 +187,16 @@ namespace WindowsFormsMap1
                 if (duplicateGroups.Count == 0) return "未发现重叠点,无需处理。";
 
                 int processedCount = 0;
-                // 3. 执行偏移处理
+                // 3. 执行偏移计算与位置更新
                 foreach (var ids in duplicateGroups)
                 {
-                    // 每一个组，让第一个保持不动(中心)，其余环绕
+                    // 设置算法逻辑：保留第一个点作为簇中心，其余点按极坐标系均匀散落在圆周上
                     for (int i = 1; i < ids.Count; i++)
                     {
                         IFeature featToMove = featureClass.GetFeature(ids[i]);
                         IPoint pt = featToMove.ShapeCopy as IPoint;
 
-                        // 计算环绕位置: 均匀分布在圆周上
+                        // 计算环绕角度
                         double angle = (2 * Math.PI / (ids.Count - 1)) * (i - 1);
                         pt.X += offsetDistanceDegree * Math.Cos(angle);
                         pt.Y += offsetDistanceDegree * Math.Sin(angle);
@@ -239,41 +240,41 @@ namespace WindowsFormsMap1
         public static void ExportGeometryToShapefile(List<IGeometry> geometries, string filePath)
         {
             if (geometries == null || geometries.Count == 0) throw new Exception("没有几何体可导出");
-            
+
             // 1. 创建 Shapefile
             string folder = System.IO.Path.GetDirectoryName(filePath);
             string name = System.IO.Path.GetFileName(filePath);
-            
+
             IWorkspaceFactory workspaceFactory = new ShapefileWorkspaceFactoryClass();
             IFeatureWorkspace featureWorkspace = (IFeatureWorkspace)workspaceFactory.OpenFromFile(folder, 0);
-            
+
             // 定义字段
             IFields fields = new FieldsClass();
             IFieldsEdit fieldsEdit = (IFieldsEdit)fields;
-            
+
             // OID 字段
             IField fieldOID = new FieldClass();
             IFieldEdit fieldEditOID = (IFieldEdit)fieldOID;
             fieldEditOID.Name_2 = "OID";
             fieldEditOID.Type_2 = esriFieldType.esriFieldTypeOID;
             fieldsEdit.AddField(fieldOID);
-            
+
             // Shape 字段
             IField fieldShape = new FieldClass();
             IFieldEdit fieldEditShape = (IFieldEdit)fieldShape;
             fieldEditShape.Name_2 = "Shape";
             fieldEditShape.Type_2 = esriFieldType.esriFieldTypeGeometry;
-            
+
             IGeometryDef geometryDef = new GeometryDefClass();
             IGeometryDefEdit geometryDefEdit = (IGeometryDefEdit)geometryDef;
             geometryDefEdit.GeometryType_2 = geometries[0].GeometryType;
             geometryDefEdit.SpatialReference_2 = geometries[0].SpatialReference;
             fieldEditShape.GeometryDef_2 = geometryDef;
             fieldsEdit.AddField(fieldShape);
-            
+
             // 创建要素类
             IFeatureClass featureClass = featureWorkspace.CreateFeatureClass(name, fields, null, null, esriFeatureType.esriFTSimple, "Shape", "");
-            
+
             // 2. 插入数据
             IFeatureCursor cursor = featureClass.Insert(true);
             foreach (var geo in geometries)
@@ -292,24 +293,24 @@ namespace WindowsFormsMap1
         {
             IFeatureSelection featureSelection = featureLayer as IFeatureSelection;
             ISelectionSet selectionSet = featureSelection.SelectionSet;
-            
+
             if (selectionSet.Count == 0) throw new Exception("没有选中任何要素");
 
             // 1. 获取源字段定义
             IFeatureClass sourceClass = featureLayer.FeatureClass;
             IFields sourceFields = sourceClass.Fields;
-            
+
             // 2. 创建目标 Shapefile
             string folder = System.IO.Path.GetDirectoryName(filePath);
             string name = System.IO.Path.GetFileName(filePath);
-            
+
             IWorkspaceFactory workspaceFactory = new ShapefileWorkspaceFactoryClass();
             IFeatureWorkspace featureWorkspace = (IFeatureWorkspace)workspaceFactory.OpenFromFile(folder, 0);
-            
+
             // 克隆字段 (Shapefile 有字段名长度限制，可能需要截断，暂简化处理)
             // 为简单起见，我们重新定义核心字段，或者使用 IFeatureDataConverter 导出
             // 这里使用更底层的 IFeatureDataConverter 导出选集会更稳健
-            
+
             ExportByExporter(featureLayer, filePath);
         }
 
@@ -317,7 +318,7 @@ namespace WindowsFormsMap1
         {
             // 使用 Geoprocessor 或 FeatureDataConverter 导出选集
             // 这里为了简化依赖，手动循环插入
-            
+
             string folder = System.IO.Path.GetDirectoryName(targetPath);
             string name = System.IO.Path.GetFileName(targetPath);
             IWorkspaceFactory wf = new ShapefileWorkspaceFactoryClass();
@@ -325,45 +326,44 @@ namespace WindowsFormsMap1
 
             // 创建要素类 (使用源字段，注意Shapefile限制)
             // 简化：仅保留 Shape 字段以避免复杂性，或者仅导出几何
-             // 实际上，为了稳健，我们通过 GeoProcessor 导出可能更好，但 AE 环境下 GP 较慢
+            // 实际上，为了稳健，我们通过 GeoProcessor 导出可能更好，但 AE 环境下 GP 较慢
             // 还是写循环吧
-            
+
             IFeatureClass sourceInfo = sourceLayer.FeatureClass;
             // 简化：新建只有几何的 Shapefile，或者克隆字段
             // Clone 字段逻辑需要处理别名和类型映射，较繁琐。
             // 这种情况下，使用 IFeatureDataConverter 是标准做法。
-            
+
             IDataset sourceDataset = sourceLayer.FeatureClass as IDataset;
             IDatasetName sourceDatasetName = sourceDataset.FullName as IDatasetName;
-            
+
             IWorkspaceName targetWorkspaceName = new WorkspaceNameClass();
             targetWorkspaceName.WorkspaceFactoryProgID = "esriDataSourcesFile.ShapefileWorkspaceFactory";
             targetWorkspaceName.PathName = folder;
-            
+
             IFeatureClassName targetFeatureClassName = new FeatureClassNameClass();
             IDatasetName targetDatasetName = (IDatasetName)targetFeatureClassName;
             targetDatasetName.Name = name;
             targetDatasetName.WorkspaceName = targetWorkspaceName;
 
             IFeatureDataConverter converter = new FeatureDataConverterClass();
-            
+
             // 仅导出选中要素
-            IQueryFilter qf = null; // 全部
             // 但是我们需要SelectionSet。Converter通常作用于FeatureClass。
             // 这里我们用 EnumFeatureGeometry 的方式手动写入最可靠
-            
+
             // 回退到手动写入：
             ManualExportSelection(sourceLayer, fw, name);
         }
 
         private static void ManualExportSelection(IFeatureLayer layer, IFeatureWorkspace fw, string name)
         {
-             IFeatureClass srcClass = layer.FeatureClass;
-             // 简化：仅创建 Shape 字段
-             IFields fields = new FieldsClass();
-             IFieldsEdit fieldsEdit = (IFieldsEdit)fields;
-             
-             // OID
+            IFeatureClass srcClass = layer.FeatureClass;
+            // 简化：仅创建 Shape 字段
+            IFields fields = new FieldsClass();
+            IFieldsEdit fieldsEdit = (IFieldsEdit)fields;
+
+            // OID
             IField oidField = new FieldClass();
             ((IFieldEdit)oidField).Name_2 = "OID";
             ((IFieldEdit)oidField).Type_2 = esriFieldType.esriFieldTypeOID;
@@ -375,18 +375,18 @@ namespace WindowsFormsMap1
             ((IFieldEdit)shapeField).Type_2 = esriFieldType.esriFieldTypeGeometry;
             ((IFieldEdit)shapeField).GeometryDef_2 = srcClass.Fields.get_Field(srcClass.FindField(srcClass.ShapeFieldName)).GeometryDef;
             fieldsEdit.AddField(shapeField);
-            
+
             // 创建
             IFeatureClass tgtClass = fw.CreateFeatureClass(name, fields, null, null, esriFeatureType.esriFTSimple, "Shape", "");
-            
+
             // 插入选集
             IFeatureSelection fSel = (IFeatureSelection)layer;
             IEnumIDs enumIDs = fSel.SelectionSet.IDs;
             int id = enumIDs.Next();
-            
+
             IFeatureCursor insertCursor = tgtClass.Insert(true);
-            
-            while(id != -1)
+
+            while (id != -1)
             {
                 IFeature srcFeat = srcClass.GetFeature(id);
                 IFeatureBuffer buf = tgtClass.CreateFeatureBuffer();

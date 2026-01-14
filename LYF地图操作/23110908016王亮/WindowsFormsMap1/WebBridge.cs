@@ -7,19 +7,19 @@ using System.Collections.Generic;
 namespace WindowsFormsMap1
 {
     /// <summary>
-    /// WebView2 交互桥接类
-    /// 允许 JS 直接调用 C# 方法操作数据库
+    /// 【Web 指挥桥接类】：负责 C# 宿主程序与 WebView2 网页前端的双向通信
+    /// 逻辑：JS 通过 window.chrome.webview.hostObjects.bridge 调用此处的方法，实现网页端对本地数据库的访问
     /// </summary>
     [ClassInterface(ClassInterfaceType.AutoDual)]
     [ComVisible(true)]
     public class WebBridge
     {
-        // 1. 获取基础数据 (供 JS 初始化调用)
+        // 【数据初始化】：由网页端加载时首选调用，获取全省非遗项目的统计指标与空间坐标
         public string GetAllData()
         {
             try
             {
-                // 获取统计数据
+                // 1. 获取地市级统计数据（用于绘制主屏柱状图/热力图）
                 var cityStats = new List<CityStat>();
                 DataTable dtCity = DBHelper.ExecuteQuery("SELECT City, COUNT(*) as Cnt FROM ICH_Items GROUP BY City");
                 foreach (DataRow dr in dtCity.Rows)
@@ -34,7 +34,7 @@ namespace WindowsFormsMap1
                     catStats.Add(new CategoryStat { name = dr["Category"].ToString(), count = Convert.ToInt32(dr["Cnt"]) });
                 }
 
-                // 获取点位数据 (限制 1000 条以免前端卡顿)
+                // 3. 提取非遗项目点位（限制 1000 条以确保 Web GL 渲染流畅，避免前端内存溢出）
                 var points = new List<ProjectPoint>();
                 DataTable dtPoints = DBHelper.ExecuteQuery("SELECT TOP 1000 Name, Category, City, Latitude, Longitude, Batch FROM ICH_Items");
                 foreach (DataRow dr in dtPoints.Rows)
@@ -53,6 +53,7 @@ namespace WindowsFormsMap1
                 // [Debug] Show data count
                 // MessageBox.Show($"Debug: Loaded {points.Count} items from DB.", "Data Check");
 
+                // 4. 封装并序列化为标准 JSON 字符串
                 WebData data = new WebData();
                 data.projectInfo.lastUpdated = DateTime.Now.ToString("yyyy-MM-dd");
                 data.projectInfo.totalItems = Convert.ToInt32(DBHelper.ExecuteScalar("SELECT COUNT(*) FROM ICH_Items"));
@@ -62,23 +63,21 @@ namespace WindowsFormsMap1
 
                 var serializer = new System.Web.Script.Serialization.JavaScriptSerializer();
                 string result = serializer.Serialize(data);
-                // System.IO.File.WriteAllText("c:\\debug_data.json", result); // Optional file debug
                 return result;
             }
             catch (Exception ex)
             {
-                MessageBox.Show("WebBridge Error: " + ex.Message);
+                MessageBox.Show("数据桥接解析执行错误: " + ex.Message);
                 return "{ \"error\": \"" + ex.Message + "\" }";
             }
         }
 
-        // 2. 点赞互动
+        // 【交互持久化：点赞】：接收前端传回的项目名称，并在数据库 User_Actions 中记录点赞行为
         public bool AddLike(string itemName)
         {
             try
             {
-                // 简单起见，我们暂时用 Name 来关联，正规应使用 ID
-                // 记录到 User_Actions 表
+                // SQL 逻辑：将动作类型标记为 'LIKE'
                 string sql = @"INSERT INTO User_Actions (ItemID, ActionType, ActionValue, ActionTime) 
                                SELECT ID, 'LIKE', '1', GETDATE() FROM ICH_Items WHERE Name = @Name";
 
@@ -95,7 +94,7 @@ namespace WindowsFormsMap1
             }
         }
 
-        // 3. 发表评论
+        // 【交互持久化：评论】：接收前端传回的项目名称与评论内容，记录到数据库 User_Actions 表
         public bool AddComment(string itemName, string comment)
         {
             try
@@ -117,7 +116,7 @@ namespace WindowsFormsMap1
             }
         }
 
-        // 4. 获取评论列表
+        // 【实时交互：获取评论】：从数据库提取该非遗项目的所有历史评价，按时间倒序排列
         public string GetComments(string itemName)
         {
             try
@@ -125,7 +124,7 @@ namespace WindowsFormsMap1
                 string sql = @"SELECT ActionValue, ActionTime FROM User_Actions 
                                INNER JOIN ICH_Items ON User_Actions.ItemID = ICH_Items.ID
                                WHERE ICH_Items.Name = @Name AND ActionType = 'COMMENT'
-                               ORDER BY ActionTime DESC"; // 最新评论在前
+                               ORDER BY ActionTime DESC";
 
                 System.Data.SqlClient.SqlParameter[] p = {
                     new System.Data.SqlClient.SqlParameter("@Name", itemName)
@@ -151,7 +150,7 @@ namespace WindowsFormsMap1
             }
         }
 
-        // 5. 获取大数据量的路网数据 (供 JS 直接拉取，避免 ExecuteScriptAsync 的大小限制)
+        // 【数据传输：路网数据】：直接从本地文件读取路网数据，避免 WebView2 的 ExecuteScriptAsync 方法对大数据量的限制
         public string GetRoadsData()
         {
             try
@@ -163,7 +162,8 @@ namespace WindowsFormsMap1
                 // 如果 bin 目录下没找到，尝试向上找源码目录 (开发环境下)
                 if (!System.IO.File.Exists(path))
                 {
-                     path = System.IO.Path.GetFullPath(System.IO.Path.Combine(baseDir, @"..\..\VisualWeb", "data", "roads.json"));
+                    string devPath = System.IO.Path.GetFullPath(System.IO.Path.Combine(baseDir, @"..\..\VisualWeb", "data", "roads.json"));
+                    if (System.IO.File.Exists(devPath)) path = devPath;
                 }
 
                 if (System.IO.File.Exists(path))
@@ -178,7 +178,7 @@ namespace WindowsFormsMap1
             }
         }
 
-        // --- 数据模型类 ---
+        // --- 数据模型定义：用于 JSON 序列化，方便 C# 与 JS 之间的数据交换 ---
         public class ProjectPoint
         {
             public string name { get; set; }
@@ -216,16 +216,13 @@ namespace WindowsFormsMap1
             public string lastUpdated { get; set; }
         }
 
-        // [Member E] Added: 路线保存功能 - 保存路线起终点到数据库
+        // 【路线管理：保存】：保存由 JS 规划出的推荐游览路线（点位坐标串及名称）
         public bool SaveRoute(string routeName, double startLng, double startLat,
                               double endLng, double endLat, string ichItemsJson, string description)
         {
             try
             {
-                System.Diagnostics.Debug.WriteLine($"[SaveRoute] 开始保存路线: {routeName}");
-                System.Diagnostics.Debug.WriteLine($"[SaveRoute] 起点: ({startLng}, {startLat}), 终点: ({endLng}, {endLat})");
-
-                // 插入路线记录到数据库
+                // 1. 插入路线基本信息
                 string insertRoute = @"
                     INSERT INTO Saved_Routes 
                     (RouteName, StartLng, StartLat, EndLng, EndLat, Description)
@@ -240,25 +237,18 @@ namespace WindowsFormsMap1
                     new System.Data.SqlClient.SqlParameter("@eLat", endLat),
                     new System.Data.SqlClient.SqlParameter("@desc", description ?? ""));
 
-                if (result == null)
-                {
-                    System.Diagnostics.Debug.WriteLine("[SaveRoute] ExecuteScalar返回null");
-                    return false;
-                }
+                if (result == null) return false;
 
                 int routeId = Convert.ToInt32(result);
-                System.Diagnostics.Debug.WriteLine($"[SaveRoute] 路线保存成功: ID={routeId}");
                 return true;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                System.Diagnostics.Debug.WriteLine($"[SaveRoute] Error: {ex.Message}");
-                System.Diagnostics.Debug.WriteLine($"[SaveRoute] StackTrace: {ex.StackTrace}");
                 return false;
             }
         }
 
-        // [Member E] Added: 获取历史路线列表
+        // 【路线管理：读取】：获取数据库中存储的所有历史路线摘要
         public string GetSavedRoutes()
         {
             try
@@ -272,14 +262,13 @@ namespace WindowsFormsMap1
 
                 return DBHelper.ExecuteJsonQuery(sql);
             }
-            catch (Exception ex)
+            catch
             {
-                System.Diagnostics.Debug.WriteLine($"[GetSavedRoutes] Error: {ex.Message}");
                 return "[]";
             }
         }
 
-        // [Member E] Added: 获取特定路线的详细信息
+        // 【路线管理：详情】：根据路线 ID 获取单条路线的详细信息
         public string GetRouteDetail(int routeId)
         {
             try
@@ -290,7 +279,7 @@ namespace WindowsFormsMap1
                     WHERE ID = {routeId}";
 
                 string result = DBHelper.ExecuteJsonQuery(sql);
-                
+
                 // 返回第一条记录（去掉数组括号）
                 if (result.StartsWith("[") && result.EndsWith("]") && result.Length > 2)
                 {

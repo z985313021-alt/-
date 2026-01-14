@@ -130,6 +130,36 @@
                 <!-- Category Pie Chart -->
                 <div id="category-chart" class="chart-box"></div>
 
+                <!-- [Agent Add] 统计图表容器 - 仅在数据概览显示 -->
+                <div class="stats-charts-container">
+                    <!-- 地市排行榜 -->
+                    <div class="chart-section" style="margin-top: 20px;">
+                        <h4
+                            style="color: rgba(255,255,255,0.9); font-size: 14px; margin-bottom: 10px; display: flex; align-items: center; gap: 5px;">
+                            <span>📍</span> 地市分布排行
+                        </h4>
+                        <div id="city-rank-chart" class="chart-box" style="height: 180px;"></div>
+                    </div>
+
+                    <!-- [Agent Add] 申报批次趋势 -->
+                    <div class="chart-section" style="margin-top: 20px;">
+                        <h4
+                            style="color: rgba(255,255,255,0.9); font-size: 14px; margin-bottom: 10px; display: flex; align-items: center; gap: 5px;">
+                            <span>📈</span> 申报趋势分析
+                        </h4>
+                        <div id="trend-chart" class="chart-box" style="height: 120px;"></div>
+                    </div>
+
+                    <!-- [Agent Add] 热门非遗 TOP5 -->
+                    <div class="chart-section" style="margin-top: 20px;">
+                        <h4
+                            style="color: rgba(255,255,255,0.9); font-size: 14px; margin-bottom: 10px; display: flex; align-items: center; gap: 5px;">
+                            <span>🔥</span> 人气榜单
+                        </h4>
+                        <div id="hot-list" style="display: flex; flex-direction: column; gap: 6px;"></div>
+                    </div>
+                </div> <!-- End stats-charts-container -->
+
                 <!-- Keep old detail elements hidden but functional for JS compatibility -->
                 <div id="detail-card" class="info-card" style="display: none;">
                     <h3 id="detail-title">项目名称</h3>

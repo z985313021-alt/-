@@ -5,19 +5,24 @@ using ESRI.ArcGIS.Geodatabase;
 
 namespace WindowsFormsMap1
 {
+    /// <summary>
+    /// 【非遗详情展示窗体】：点击地图点位后弹出的详细属性卡片
+    /// 包含属性表格、自动布局对齐算法以及基于项目名称的联网搜索功能
+    /// </summary>
     public partial class FormICHDetails : Form
     {
-        private IFeature _feature;
+        private IFeature _feature; // 承载当前展示的地理要素实例
 
         public FormICHDetails(IFeature feature)
         {
             InitializeComponent();
             _feature = feature;
-            ApplyModernStyle();
-            LoadAttributes();
+            ApplyModernStyle(); // 执行 UI 美化
+            LoadAttributes();   // 加载字段数据
         }
 
         // [Agent Add] Added: 美化界面样式，使其更像现代卡片
+        // 【UI 指标配置】：手动调整控件外观，剥离默认的 WinForms 老旧风格，营造扁平化视觉效果
         private void ApplyModernStyle()
         {
             this.BackColor = System.Drawing.Color.White;
@@ -25,9 +30,9 @@ namespace WindowsFormsMap1
             this.Font = new System.Drawing.Font("微软雅黑", 9F);
             this.Text = " 📜 非遗项目详情";
             this.ShowInTaskbar = false;
-            this.TopMost = true;
+            this.TopMost = true; // 确保置顶显示在地图上方
 
-            // DataGridView 样式
+            // DataGridView 栅格样式美化
             dataGridView1.BackgroundColor = System.Drawing.Color.White;
             dataGridView1.BorderStyle = BorderStyle.None;
             dataGridView1.GridColor = System.Drawing.Color.FromArgb(240, 240, 240);
@@ -38,7 +43,7 @@ namespace WindowsFormsMap1
             dataGridView1.ColumnHeadersDefaultCellStyle.BackColor = System.Drawing.Color.FromArgb(241, 245, 249);
             dataGridView1.EnableHeadersVisualStyles = false;
 
-            // 按钮样式
+            // 现代蓝色调按钮
             btnSearch.FlatStyle = FlatStyle.Flat;
             btnSearch.BackColor = System.Drawing.Color.FromArgb(37, 99, 235);
             btnSearch.ForeColor = System.Drawing.Color.White;
@@ -52,19 +57,20 @@ namespace WindowsFormsMap1
         }
 
         // [Agent Modified] Modified: 优化定位算法，改为右对齐鹰眼面板，确保不溢出屏幕右侧
+        // 【动态对齐逻辑】：确保详情卡片始终相对于侧边栏/鹰眼视图定位，并自动处理屏幕越界溢出
         public void AlignToSidebar(Form parentForm, Panel eaglePanel)
         {
             if (parentForm == null || eaglePanel == null) return;
 
-            // 获取鹰眼面板在屏幕上的坐标
+            // 获取控件在屏幕坐标系中的锚点
             System.Drawing.Point screenPoint = eaglePanel.PointToScreen(System.Drawing.Point.Empty);
 
-            // 设置位置：右对齐鹰眼（保持 5px 边距），垂直紧贴鹰眼下方
+            // 主定位逻辑：右对齐鹰眼面板，预留 5px 的间距
             this.StartPosition = FormStartPosition.Manual;
             this.Left = screenPoint.X + eaglePanel.Width - this.Width;
             this.Top = screenPoint.Y + eaglePanel.Height + 5;
 
-            // 简单防溢出检查
+            // 自动越界保护检查
             var workingArea = Screen.FromControl(parentForm).WorkingArea;
             if (this.Right > workingArea.Right)
             {
@@ -72,6 +78,7 @@ namespace WindowsFormsMap1
             }
             if (this.Bottom > workingArea.Bottom)
             {
+                // 若下方空间不足，则向上弹出显示
                 this.Top = screenPoint.Y - this.Height - 5; // 如果下方放不下，放上面
             }
         }
@@ -107,13 +114,14 @@ namespace WindowsFormsMap1
             this.Close();
         }
 
+        // 【语义化搜索】：智能识别项目名称字段并调用系统浏览器展示外部知识库
         private void btnSearch_Click(object sender, EventArgs e)
         {
             try
             {
                 if (_feature == null) return;
 
-                // 尝试找名称字段，支持多种命名
+                // 搜索核心字段列表（适配不同版本的要素类结构）
                 string nameField = "";
                 string[] possibleNames = { "名称", "Name", "Title", "项目名称", "非遗名", "ProjectName" };
 
@@ -132,6 +140,7 @@ namespace WindowsFormsMap1
                     if (!string.IsNullOrEmpty(nameField)) break;
                 }
 
+                // 后备策略：若无特定名称字段，选取首个有意义的文本字段
                 if (string.IsNullOrEmpty(nameField))
                 {
                     // 如果没找到名称字段，尝试找索引为1或2的字符串字段作为替补
@@ -152,7 +161,7 @@ namespace WindowsFormsMap1
                     if (val != null && val != DBNull.Value)
                     {
                         string keyword = val.ToString();
-                        // 智能判断上下文
+                        // 智能拼接百度搜索链接，增加“山东非遗”上下文以提高匹配精度
                         string queryPrefix = "山东非遗 ";
                         if (keyword.Contains("市") || keyword.Contains("县") || keyword.Contains("区"))
                         {
@@ -164,17 +173,17 @@ namespace WindowsFormsMap1
                     }
                     else
                     {
-                        MessageBox.Show("该要素名称为空，无法搜索。");
+                        MessageBox.Show("该要素名称为空，目前无法进行外部搜索。");
                     }
                 }
                 else
                 {
-                    MessageBox.Show("未找到有效的名称字段。");
+                    MessageBox.Show("数据库内未找到有效的名称字段标签。");
                 }
             }
             catch (Exception ex)
             {
-                MessageBox.Show("打开浏览器失败: " + ex.Message);
+                MessageBox.Show("由于系统安全限制或浏览器异常，搜索启动失败: " + ex.Message);
             }
         }
     }
